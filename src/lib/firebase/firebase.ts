@@ -1,7 +1,7 @@
-import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
+import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
+import { getAuth, Auth } from "firebase/auth";
+import { getFirestore, Firestore } from "firebase/firestore";
+import { getStorage, FirebaseStorage } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -12,10 +12,19 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Initialize Firebase
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const storage = getStorage(app);
+// Only initialize when a real API key is present, so the app doesn't crash
+// before Firebase is configured (e.g. during local practice without secrets).
+export const isFirebaseConfigured = Boolean(firebaseConfig.apiKey);
+
+const app: FirebaseApp | null = isFirebaseConfigured
+  ? getApps().length
+    ? getApp()
+    : initializeApp(firebaseConfig)
+  : null;
+
+// Cast so consumers keep their existing types; guarded by isFirebaseConfigured.
+const auth = (app ? getAuth(app) : null) as Auth;
+const db = (app ? getFirestore(app) : null) as Firestore;
+const storage = (app ? getStorage(app) : null) as FirebaseStorage;
 
 export { app, auth, db, storage };
