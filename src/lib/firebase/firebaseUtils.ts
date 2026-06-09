@@ -106,12 +106,10 @@ export const addTicketResponse = async (
   id: string,
   response: TicketResponse
 ) => {
-  const patch: Record<string, unknown> = {
-    responses: arrayUnion(response),
-  };
-  if (response.from === "company") {
-    patch.companyLastResponseAt = response.at;
-  }
+  const patch =
+    response.from === "company"
+      ? { responses: arrayUnion(response), companyLastResponseAt: response.at }
+      : { responses: arrayUnion(response) };
   await updateDoc(doc(db, "tickets", id), patch);
 };
 

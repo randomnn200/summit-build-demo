@@ -747,9 +747,11 @@ function ClientsTab({ currentUserName }: { currentUserName: string | null }) {
     arr.push(t);
     ticketsByUser.set(t.userId, arr);
   }
-  const uids = new Set<string>([...usersById.keys(), ...ticketsByUser.keys()]);
+  const uids = new Set<string>(
+    Array.from(usersById.keys()).concat(Array.from(ticketsByUser.keys()))
+  );
 
-  const clients: Client[] = [...uids].map((uid) => {
+  const clients: Client[] = Array.from(uids).map((uid) => {
     const u = usersById.get(uid);
     const ts = (ticketsByUser.get(uid) ?? []).sort(
       (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0)

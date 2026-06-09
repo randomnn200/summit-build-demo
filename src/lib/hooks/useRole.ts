@@ -14,6 +14,7 @@ export function useRole() {
   const [config, setConfig] = useState<RolesConfig>({
     ownerEmails: [],
     employeeEmails: [],
+    employeeTitles: {},
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
