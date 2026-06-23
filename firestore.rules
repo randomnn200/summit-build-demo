@@ -1,0 +1,48 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isStaffCollection(name) {
+      return name in [
+        'tickets',
+        'users',
+        'callNotes',
+        'schedule',
+        'quoteRequests',
+        'analyticsWeekly',
+        'inventory',
+        'inventoryTransactions',
+        'purchaseOrders',
+        'expenses',
+        'savedQuotes',
+        'jobs',
+        'timeOffRequests',
+        'googleReviewReplies'
+      ];
+    }
+
+    // Homepage contact form — no login required to submit a lead
+    match /quoteRequests/{id} {
+      allow create: if request.resource.data.keys().hasAll(['name', 'phone', 'status'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.phone is string
+        && request.resource.data.status == 'new';
+      allow read, update, delete: if isSignedIn();
+    }
+
+    // Owner / employee portal roles (UI enforces owner-only writes)
+    match /appConfig/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Weekly analytics snapshots, inventory, expenses, etc.
+    match /{collection}/{docId} {
+      allow read, write: if isSignedIn() && isStaffCollection(collection);
+    }
+  }
+}

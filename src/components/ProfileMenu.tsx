@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Briefcase, LogOut, ShieldCheck } from "lucide-react";
 import { useAuth } from "../lib/hooks/useAuth";
 import { formatPhone } from "../lib/formatPhone";
+import { companyInitials } from "../lib/theme";
 import {
   emptyProfile,
   ensureUserRecord,
@@ -15,8 +16,8 @@ import {
   type UserProfile,
 } from "../lib/firebase/firebaseUtils";
 
-const GREEN = "#006847";
-const RED = "#CE1126";
+const GREEN = "var(--brand-primary)";
+const RED = "var(--brand-accent)";
 
 const roleLabels: Record<Role, string> = {
   owner: "Owner",
@@ -226,11 +227,7 @@ export default function ProfileMenu() {
 
       {open && (
         <div className="absolute right-0 z-50 mt-2 w-80 max-w-[92vw] overflow-hidden rounded-xl border border-gray-100 bg-white shadow-2xl">
-          <div className="flex h-1.5 w-full">
-            <div className="flex-1" style={{ backgroundColor: GREEN }} />
-            <div className="flex-1 bg-white" />
-            <div className="flex-1" style={{ backgroundColor: RED }} />
-          </div>
+          <div className="brand-bar" />
 
           <div className="max-h-[70vh] overflow-y-auto p-5">
             <div className="flex items-start justify-between">

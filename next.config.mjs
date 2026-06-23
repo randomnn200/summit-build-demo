@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Dev uses .next-dev (see scripts/dev.mjs) so production builds never break a running dev server.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   images: {
     remotePatterns: [
       {
@@ -15,6 +17,10 @@ const nextConfig = {
       {
         protocol: "https",
         hostname: "replicate.delivery",
+      },
+      {
+        protocol: "https",
+        hostname: "images.unsplash.com",
       },
       {
         protocol: "https",

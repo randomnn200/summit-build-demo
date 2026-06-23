@@ -1,50 +1,89 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
+  Briefcase,
+  BarChart3,
+  Calculator,
   CalendarClock,
   ClipboardList,
   Contact,
   Home,
+  Inbox,
   Mail,
   MapPin,
+  Package,
+  Palette,
+  Receipt,
   LogOut,
   Phone,
   Plus,
   Search,
   Send,
   ShieldCheck,
+  Star,
   Trash2,
   Users,
   X,
 } from "lucide-react";
 import { useAuth } from "../lib/hooks/useAuth";
 import { useRole } from "../lib/hooks/useRole";
+import { useTheme } from "../lib/hooks/useTheme";
 import { formatPhone } from "../lib/formatPhone";
+import { companyInitials, THEME_PRESETS } from "../lib/theme";
+import {
+  computeAnalyticsMetrics,
+  formatWeekLabel,
+  getWeekId,
+  snapshotFromMetrics,
+  type AnalyticsMetrics,
+  type AnalyticsWeeklySnapshot,
+} from "../lib/analyticsMetrics";
+import { getGoogleReviewMetrics } from "../lib/googleReviewsDemo";
+import { GoogleReviewsPanelTrigger } from "./GoogleReviewsPanel";
+import GoogleReviewsTab from "./GoogleReviewsTab";
+import InventoryTab from "./InventoryTab";
+import ExpensesTab from "./ExpensesTab";
+import QuoteHelperTab from "./QuoteHelperTab";
+import JobsTab from "./JobsTab";
+import ScheduleTab from "./ScheduleTab";
 import {
   addCallNote,
   addEmployee,
-  addScheduleItem,
   addTicketResponse,
   deleteCallNote,
-  deleteScheduleItem,
+  deleteQuoteRequest,
+  deleteTicket,
+  clearTicketDeletionRequest,
   getAllUsers,
   getCallNotes,
-  getScheduleItems,
   companyTicketState,
   getUserProfile,
   isEnvOwner,
   markTicketViewedByCompany,
   removeEmployee,
+  requestTicketDeletion,
   roleForEmail,
   setEmployeeTitle,
   setUserRole,
   subscribeToAllTickets,
+  subscribeToAllUsers,
+  subscribeToJobs,
+  subscribeToQuoteRequests,
+  subscribeToSavedQuotes,
+  subscribeToScheduleItems,
   subscribeToTicket,
+  saveWeeklyAnalyticsSnapshot,
+  subscribeToWeeklyAnalyticsSnapshots,
   ticketStatuses,
+  updateQuoteRequestStatus,
   updateTicketStatus,
   type CallNote,
+  type Job,
+  type QuoteRequest,
+  type QuoteRequestStatus,
+  type SavedQuote,
   type Role,
   type RolesConfig,
   type ScheduleItem,
@@ -54,10 +93,10 @@ import {
   type UserProfile,
 } from "../lib/firebase/firebaseUtils";
 
-const GREEN = "#006847";
-const RED = "#CE1126";
+const GREEN = "var(--brand-primary)";
+const RED = "var(--brand-accent)";
 
-type Tab = "tickets" | "clients" | "calls" | "schedule" | "users" | "team";
+type Tab = "tickets" | "clients" | "leads" | "calls" | "jobs" | "schedule" | "inventory" | "expenses" | "quotes" | "reviews" | "analytics" | "users" | "team" | "settings";
 
 function fmtDate(createdAt: { seconds: number } | null) {
   if (!createdAt?.seconds) return "—";
@@ -71,6 +110,7 @@ function fmtDate(createdAt: { seconds: number } | null) {
 export default function EmployeePortal() {
   const { user, loading: authLoading, signInWithGoogle, signOut } = useAuth();
   const { role, config, setConfig, loading: roleLoading, error } = useRole();
+  const { theme } = useTheme();
   const [tab, setTab] = useState<Tab>("tickets");
 
   const loading = authLoading || roleLoading;
@@ -143,16 +183,25 @@ export default function EmployeePortal() {
   const tabs: { id: Tab; label: string; icon: React.ReactNode; ownerOnly?: boolean }[] = [
     { id: "tickets", label: "Tickets", icon: <ClipboardList size={16} /> },
     { id: "clients", label: "Clients", icon: <Contact size={16} /> },
+    { id: "leads", label: "Lead Inbox", icon: <Inbox size={16} /> },
     { id: "calls", label: "Call Notes", icon: <Phone size={16} /> },
+    { id: "jobs", label: "Jobs", icon: <Briefcase size={16} /> },
     { id: "schedule", label: "Schedule", icon: <CalendarClock size={16} /> },
+    { id: "inventory", label: "Inventory", icon: <Package size={16} /> },
+    { id: "expenses", label: "Expenses", icon: <Receipt size={16} /> },
+    { id: "quotes", label: "Quote Helper", icon: <Calculator size={16} /> },
+    { id: "reviews", label: "Reviews", icon: <Star size={16} />, ownerOnly: true },
+    { id: "analytics", label: "Analytics", icon: <BarChart3 size={16} />, ownerOnly: true },
     { id: "users", label: "Users", icon: <Users size={16} />, ownerOnly: true },
     { id: "team", label: "Team", icon: <Users size={16} />, ownerOnly: true },
+    { id: "settings", label: "Settings", icon: <Palette size={16} /> },
   ];
 
   return (
     <PortalShell
       user={{ email: user.email, role }}
       onSignOut={signOut}
+      companyName={theme.companyName}
     >
       <div className="mb-6 flex flex-wrap gap-2">
         {tabs
@@ -174,15 +223,72 @@ export default function EmployeePortal() {
           ))}
       </div>
 
-      {tab === "tickets" && <TicketsTab currentUserName={user.displayName} />}
-      {tab === "clients" && <ClientsTab currentUserName={user.displayName} />}
+      {tab === "tickets" && (
+        <TicketsTab
+          currentUserName={user.displayName}
+          role={role}
+          userEmail={user.email}
+        />
+      )}
+      {tab === "clients" && (
+        <ClientsTab
+          currentUserName={user.displayName}
+          role={role}
+          userEmail={user.email}
+        />
+      )}
+      {tab === "leads" && <LeadInboxTab />}
       {tab === "calls" && <CallNotesTab createdByName={user.displayName} />}
-      {tab === "schedule" && <ScheduleTab />}
+      {tab === "jobs" && (
+        <JobsTab
+          userName={user.displayName}
+          userEmail={user.email}
+          role={role}
+        />
+      )}
+      {tab === "schedule" && (
+        <ScheduleTab
+          role={role}
+          userName={user.displayName}
+          userEmail={user.email}
+          config={config}
+        />
+      )}
+      {tab === "inventory" && (
+        <InventoryTab
+          userName={user.displayName}
+          userEmail={user.email}
+          role={role}
+        />
+      )}
+      {tab === "expenses" && (
+        <ExpensesTab
+          userName={user.displayName}
+          userEmail={user.email}
+          role={role}
+        />
+      )}
+      {tab === "quotes" && (
+        <QuoteHelperTab
+          userName={user.displayName}
+          userEmail={user.email}
+        />
+      )}
+      {tab === "reviews" && role === "owner" && (
+        <GoogleReviewsTab
+          userName={user.displayName}
+          userEmail={user.email}
+        />
+      )}
+      {tab === "analytics" && role === "owner" && <AnalyticsTab user={user} />}
       {tab === "users" && role === "owner" && (
         <UsersTab config={config} setConfig={setConfig} />
       )}
       {tab === "team" && role === "owner" && (
         <TeamTab config={config} setConfig={setConfig} />
+      )}
+      {tab === "settings" && (
+        <SettingsTab role={role} />
       )}
     </PortalShell>
   );
@@ -194,18 +300,20 @@ function PortalShell({
   children,
   user,
   onSignOut,
+  companyName,
 }: {
   children: React.ReactNode;
   user?: { email: string | null; role: string };
   onSignOut?: () => void;
+  companyName?: string;
 }) {
+  const { theme } = useTheme();
+  const displayName = companyName ?? theme.companyName;
+  const initials = companyInitials(displayName);
+
   return (
     <main className="min-h-screen bg-gray-50">
-      <div className="flex h-1.5 w-full">
-        <div className="flex-1" style={{ backgroundColor: GREEN }} />
-        <div className="flex-1 bg-white" />
-        <div className="flex-1" style={{ backgroundColor: RED }} />
-      </div>
+      <div className="brand-bar" />
       <header className="border-b border-gray-200 bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-2">
@@ -213,13 +321,13 @@ function PortalShell({
               className="flex h-8 w-8 items-center justify-center rounded-md text-sm font-black text-white"
               style={{ backgroundColor: GREEN }}
             >
-              IC
+              {initials}
             </span>
             <div>
               <p className="text-sm font-extrabold leading-tight">
                 Employee Portal
               </p>
-              <p className="text-xs text-gray-500">Illegal Construction Co.</p>
+              <p className="text-xs text-gray-500">{displayName}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -298,11 +406,7 @@ function ConfirmDialog({
         className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex h-1.5 w-full">
-          <div className="flex-1" style={{ backgroundColor: GREEN }} />
-          <div className="flex-1 bg-white" />
-          <div className="flex-1" style={{ backgroundColor: RED }} />
-        </div>
+        <div className="brand-bar" />
         <div className="p-6">
           <h3 className="text-lg font-bold">{title}</h3>
           <p className="mt-2 text-sm text-gray-600">{message}</p>
@@ -343,7 +447,15 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 /* ---------------- Tickets ---------------- */
 
-function TicketsTab({ currentUserName }: { currentUserName: string | null }) {
+function TicketsTab({
+  currentUserName,
+  role,
+  userEmail,
+}: {
+  currentUserName: string | null;
+  role: Role;
+  userEmail: string | null;
+}) {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [active, setActive] = useState<Ticket | null>(null);
@@ -375,8 +487,11 @@ function TicketsTab({ currentUserName }: { currentUserName: string | null }) {
         <EmployeeTicketModal
           ticket={active}
           currentUserName={currentUserName}
+          userEmail={userEmail}
+          role={role}
           onClose={() => setActive(null)}
           onChanged={() => {}}
+          onDeleted={() => setActive(null)}
         />
       )}
       <div className="flex items-center justify-between">
@@ -400,6 +515,12 @@ function TicketsTab({ currentUserName }: { currentUserName: string | null }) {
                   <p className="text-xs text-gray-500">
                     {t.userName || "Unknown"} · {t.userEmail || "no email"}
                   </p>
+                  {t.deletionRequested && (
+                    <p className="mt-1 text-xs font-semibold text-amber-600">
+                      Deletion requested
+                      {t.deletionRequestedBy ? ` by ${t.deletionRequestedBy}` : ""}
+                    </p>
+                  )}
                 </div>
                 <select
                   value={t.status}
@@ -441,19 +562,42 @@ function TicketsTab({ currentUserName }: { currentUserName: string | null }) {
 function EmployeeTicketModal({
   ticket,
   currentUserName,
+  userEmail,
+  role,
   onClose,
   onChanged,
+  onDeleted,
 }: {
   ticket: Ticket;
   currentUserName: string | null;
+  userEmail: string | null;
+  role: Role;
   onClose: () => void;
   onChanged: () => void;
+  onDeleted: () => void;
 }) {
+  const { theme } = useTheme();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
   const [live, setLive] = useState<Ticket>(ticket);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmRequest, setConfirmRequest] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [requesting, setRequesting] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+
+  const isOwner = role === "owner";
+  const requesterLabel = currentUserName || userEmail || "Employee";
+  const isOwnDeletionRequest =
+    !!live.deletionRequested &&
+    (!live.deletionRequestedBy ||
+      live.deletionRequestedBy === requesterLabel ||
+      (!!userEmail && live.deletionRequestedBy === userEmail) ||
+      (!!currentUserName && live.deletionRequestedBy === currentUserName));
+  const busy = sending || deleting || requesting || cancelling;
 
   useEffect(() => {
     let active = true;
@@ -508,6 +652,54 @@ function EmployeeTicketModal({
     }
   };
 
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await deleteTicket(ticket.id);
+      onDeleted();
+    } catch (e) {
+      console.error(e);
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  };
+
+  const handleRequestDeletion = async () => {
+    setRequesting(true);
+    const label = currentUserName || userEmail || "Employee";
+    try {
+      await requestTicketDeletion(ticket.id, label);
+      setConfirmRequest(false);
+      onChanged();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setRequesting(false);
+    }
+  };
+
+  const handleDismissRequest = async () => {
+    try {
+      await clearTicketDeletionRequest(ticket.id);
+      onChanged();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleCancelRequest = async () => {
+    setCancelling(true);
+    try {
+      await clearTicketDeletionRequest(ticket.id);
+      setConfirmCancel(false);
+      onChanged();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setCancelling(false);
+    }
+  };
+
   const contactName = profile?.displayName || ticket.userName || "Customer";
   const contactEmail = profile?.contactEmail || ticket.userEmail || "";
   const phone = profile?.phone || "";
@@ -516,17 +708,13 @@ function EmployeeTicketModal({
   return (
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4"
-      onClick={() => !sending && onClose()}
+      onClick={() => !busy && onClose()}
     >
       <div
         className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex h-1.5 w-full shrink-0">
-          <div className="flex-1" style={{ backgroundColor: GREEN }} />
-          <div className="flex-1 bg-white" />
-          <div className="flex-1" style={{ backgroundColor: RED }} />
-        </div>
+        <div className="brand-bar shrink-0" />
         <div className="overflow-y-auto p-6">
           <div className="flex items-start justify-between">
             <div>
@@ -536,7 +724,7 @@ function EmployeeTicketModal({
               </p>
             </div>
             <button
-              onClick={() => !sending && onClose()}
+              onClick={() => !busy && onClose()}
               className="text-gray-400 transition hover:text-gray-900"
               aria-label="Close"
             >
@@ -604,8 +792,38 @@ function EmployeeTicketModal({
           </div>
         </div>
 
-        {/* Reply box */}
+        {/* Reply box + ticket actions */}
         <div className="shrink-0 border-t border-gray-100 p-4">
+          {live.deletionRequested && (
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              <span>
+                Deletion requested
+                {live.deletionRequestedBy
+                  ? ` by ${live.deletionRequestedBy}`
+                  : ""}
+              </span>
+              {isOwner ? (
+                <button
+                  type="button"
+                  onClick={handleDismissRequest}
+                  disabled={busy}
+                  className="text-xs font-semibold text-amber-800 underline hover:text-amber-950 disabled:opacity-50"
+                >
+                  Dismiss request
+                </button>
+              ) : isOwnDeletionRequest ? (
+                <button
+                  type="button"
+                  onClick={() => setConfirmCancel(true)}
+                  disabled={busy}
+                  className="text-xs font-semibold text-amber-800 underline hover:text-amber-950 disabled:opacity-50"
+                >
+                  Cancel request
+                </button>
+              ) : null}
+            </div>
+          )}
+
           <div className="flex items-end gap-2">
             <textarea
               value={reply}
@@ -613,16 +831,142 @@ function EmployeeTicketModal({
               rows={2}
               placeholder="Respond to the customer…"
               className="profile-input resize-none"
+              disabled={busy}
             />
             <button
               onClick={send}
-              disabled={sending || !reply.trim()}
+              disabled={busy || !reply.trim()}
               className="flex items-center gap-1 rounded-md px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
               style={{ backgroundColor: GREEN }}
             >
               <Send size={16} />
               {sending ? "…" : "Send"}
             </button>
+          </div>
+
+          <div className="mt-4 border-t border-gray-100 pt-4">
+            {confirmDelete ? (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+                <p className="text-sm font-semibold text-red-700">
+                  Delete this ticket permanently?
+                </p>
+                <p className="mt-1 text-xs text-gray-600">
+                  This removes the ticket and all messages. This can&apos;t be
+                  undone.
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    className="flex items-center gap-1 rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                  >
+                    <Trash2 size={14} />
+                    {deleting ? "Deleting…" : "Yes, delete"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDelete(false)}
+                    disabled={deleting}
+                    className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-white disabled:opacity-60"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : confirmRequest ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <p className="text-sm font-semibold text-amber-900">
+                  Request ticket deletion?
+                </p>
+                <p className="mt-1 text-xs text-gray-600">
+                  The owner will be notified and can approve the deletion.
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleRequestDeletion}
+                    disabled={requesting}
+                    className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                  >
+                    {requesting ? "Submitting…" : "Submit request"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmRequest(false)}
+                    disabled={requesting}
+                    className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-white disabled:opacity-60"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : confirmCancel ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <p className="text-sm font-semibold text-amber-900">
+                  Cancel your deletion request?
+                </p>
+                <p className="mt-1 text-xs text-gray-600">
+                  The owner will no longer see this ticket flagged for deletion.
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCancelRequest}
+                    disabled={cancelling}
+                    className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                  >
+                    {cancelling ? "Cancelling…" : "Yes, cancel request"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmCancel(false)}
+                    disabled={cancelling}
+                    className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-white disabled:opacity-60"
+                  >
+                    Keep request
+                  </button>
+                </div>
+              </div>
+            ) : isOwner ? (
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                disabled={busy}
+                className="flex items-center gap-1.5 text-sm font-semibold text-red-600 transition hover:text-red-700 disabled:opacity-50"
+              >
+                <Trash2 size={16} />
+                Delete ticket
+              </button>
+            ) : live.deletionRequested && isOwnDeletionRequest ? (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm font-medium text-amber-700">
+                  Deletion request pending — waiting for owner approval.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setConfirmCancel(true)}
+                  disabled={busy}
+                  className="text-sm font-semibold text-amber-800 underline hover:text-amber-950 disabled:opacity-50"
+                >
+                  Cancel request
+                </button>
+              </div>
+            ) : live.deletionRequested ? (
+              <p className="text-sm font-medium text-amber-700">
+                Deletion request pending — waiting for owner approval.
+              </p>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmRequest(true)}
+                disabled={busy}
+                className="flex items-center gap-1.5 text-sm font-semibold text-amber-700 transition hover:text-amber-800 disabled:opacity-50"
+              >
+                <Trash2 size={16} />
+                Request deletion
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -637,6 +981,8 @@ function Thread({
   responses: TicketResponse[];
   viewer: "company" | "customer";
 }) {
+  const { theme } = useTheme();
+
   if (responses.length === 0) {
     return (
       <p className="mt-2 text-sm text-gray-500">No messages yet.</p>
@@ -653,16 +999,15 @@ function Thread({
             className={`flex ${mine ? "justify-end" : "justify-start"}`}
           >
             <div
-              className="max-w-[80%] rounded-2xl px-3 py-2 text-sm"
-              style={
+              className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
                 r.from === "company"
-                  ? { backgroundColor: GREEN, color: "white" }
-                  : { backgroundColor: "#f3f4f6", color: "#111827" }
-              }
+                  ? "bg-brand-primary text-white"
+                  : "bg-gray-100 text-gray-900"
+              }`}
             >
               <p className="text-[10px] font-semibold uppercase tracking-wide opacity-70">
                 {r.from === "company"
-                  ? r.authorName || "Illegal Construction Co."
+                  ? r.authorName || theme.companyName
                   : r.authorName || "Customer"}
               </p>
               <p className="mt-0.5 whitespace-pre-wrap">{r.text}</p>
@@ -715,27 +1060,41 @@ function ticketActivityAt(t: Ticket): number {
   return Math.max(created, last);
 }
 
-function ClientsTab({ currentUserName }: { currentUserName: string | null }) {
+function ClientsTab({
+  currentUserName,
+  role,
+  userEmail,
+}: {
+  currentUserName: string | null;
+  role: Role;
+  userEmail: string | null;
+}) {
   const [users, setUsers] = useState<StoredUser[]>([]);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [active, setActive] = useState<Ticket | null>(null);
+  const [savedQuotes, setSavedQuotes] = useState<SavedQuote[]>([]);
+  const [clientJobs, setClientJobs] = useState<Job[]>([]);
 
   useEffect(() => {
     let mounted = true;
     getAllUsers()
       .then((u) => mounted && setUsers(u))
       .catch((e) => console.error(e));
-    const unsub = subscribeToAllTickets((t) => {
+    const unsubTickets = subscribeToAllTickets((t) => {
       setTickets(t);
       setActive((cur) => (cur ? t.find((x) => x.id === cur.id) ?? cur : cur));
       setLoading(false);
     });
+    const unsubQuotes = subscribeToSavedQuotes(setSavedQuotes);
+    const unsubJobs = subscribeToJobs(setClientJobs);
     return () => {
       mounted = false;
-      unsub();
+      unsubTickets();
+      unsubQuotes();
+      unsubJobs();
     };
   }, []);
 
@@ -811,8 +1170,11 @@ function ClientsTab({ currentUserName }: { currentUserName: string | null }) {
         <EmployeeTicketModal
           ticket={active}
           currentUserName={currentUserName}
+          userEmail={userEmail}
+          role={role}
           onClose={() => setActive(null)}
           onChanged={() => {}}
+          onDeleted={() => setActive(null)}
         />
       )}
 
@@ -968,6 +1330,10 @@ function ClientsTab({ currentUserName }: { currentUserName: string | null }) {
                         <p className="text-xs text-gray-500">
                           {c.email || "no email"} ·{" "}
                           {c.tickets.length} ticket(s)
+                          {savedQuotes.filter((q) => q.clientUid === c.uid).length > 0 &&
+                            ` · ${savedQuotes.filter((q) => q.clientUid === c.uid).length} quote(s)`}
+                          {clientJobs.filter((j) => j.clientUid === c.uid).length > 0 &&
+                            ` · ${clientJobs.filter((j) => j.clientUid === c.uid).length} job(s)`}
                         </p>
                       </div>
                     </div>
@@ -996,6 +1362,97 @@ function ClientsTab({ currentUserName }: { currentUserName: string | null }) {
                           <p className="mt-1 text-sm text-gray-700">{c.bio}</p>
                         </div>
                       )}
+
+                      <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                        Saved quotes
+                      </p>
+                      {(() => {
+                        const clientQuotes = savedQuotes.filter(
+                          (q) => q.clientUid === c.uid
+                        );
+                        if (clientQuotes.length === 0) {
+                          return (
+                            <p className="mt-1 text-sm text-gray-500">
+                              No saved quotes yet. Use Quote Helper to save one
+                              to this client&apos;s file.
+                            </p>
+                          );
+                        }
+                        return (
+                          <ul className="mt-2 space-y-2">
+                            {clientQuotes.map((q) => (
+                              <li
+                                key={q.id}
+                                className="rounded-lg border border-gray-100 bg-white px-3 py-2"
+                              >
+                                <p className="text-sm font-semibold text-gray-900">
+                                  {q.form.projectName || q.form.projectType}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {q.form.projectType} ·{" "}
+                                  {q.result.suggestedTotal.toLocaleString(undefined, {
+                                    style: "currency",
+                                    currency: "USD",
+                                  })}{" "}
+                                  · {fmtDate(q.createdAt)}
+                                </p>
+                                {q.form.scopeNotes && (
+                                  <p className="mt-1 line-clamp-2 text-xs text-gray-600">
+                                    {q.form.scopeNotes}
+                                  </p>
+                                )}
+                                <p className="mt-1 text-[11px] text-gray-400">
+                                  Range{" "}
+                                  {q.result.lowRange.toLocaleString(undefined, {
+                                    style: "currency",
+                                    currency: "USD",
+                                  })}{" "}
+                                  –{" "}
+                                  {q.result.highRange.toLocaleString(undefined, {
+                                    style: "currency",
+                                    currency: "USD",
+                                  })}{" "}
+                                  · saved by {q.savedBy}
+                                </p>
+                              </li>
+                            ))}
+                          </ul>
+                        );
+                      })()}
+
+                      <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                        Jobs
+                      </p>
+                      {(() => {
+                        const jobsForClient = clientJobs.filter(
+                          (j) => j.clientUid === c.uid
+                        );
+                        if (jobsForClient.length === 0) {
+                          return (
+                            <p className="mt-1 text-sm text-gray-500">
+                              No jobs linked to this client yet.
+                            </p>
+                          );
+                        }
+                        return (
+                          <ul className="mt-2 space-y-2">
+                            {jobsForClient.map((j) => (
+                              <li
+                                key={j.jobId}
+                                className="rounded-lg border border-gray-100 bg-white px-3 py-2"
+                              >
+                                <p className="text-sm font-semibold text-gray-900">
+                                  #{j.jobId} · {j.title}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {j.postalCode} · {j.status.replace("_", " ")} ·{" "}
+                                  {fmtDate(j.createdAt)}
+                                </p>
+                              </li>
+                            ))}
+                          </ul>
+                        );
+                      })()}
 
                       <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-gray-400">
                         Tickets
@@ -1235,159 +1692,6 @@ function CallNotesTab({ createdByName }: { createdByName: string | null }) {
                 <div className="mt-2 flex flex-wrap gap-3 text-xs text-gray-400">
                   {n.createdByName && <span>By {n.createdByName}</span>}
                   <span>{fmtDate(n.createdAt)}</span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
-    </div>
-  );
-}
-
-/* ---------------- Schedule ---------------- */
-
-function ScheduleTab() {
-  const [items, setItems] = useState<ScheduleItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({
-    title: "",
-    date: "",
-    time: "",
-    location: "",
-    assignee: "",
-    notes: "",
-  });
-  const [saving, setSaving] = useState(false);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      setItems(await getScheduleItems());
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  const set = (k: keyof typeof form, v: string) =>
-    setForm((f) => ({ ...f, [k]: v }));
-
-  const onAdd = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.title.trim() || !form.date) return;
-    setSaving(true);
-    try {
-      await addScheduleItem(form);
-      setForm({ title: "", date: "", time: "", location: "", assignee: "", notes: "" });
-      await load();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const onDelete = async (id: string) => {
-    setItems((prev) => prev.filter((i) => i.id !== id));
-    try {
-      await deleteScheduleItem(id);
-    } catch (e) {
-      console.error(e);
-      load();
-    }
-  };
-
-  return (
-    <div className="grid gap-6 lg:grid-cols-2">
-      <Card>
-        <SectionTitle>Schedule a Job</SectionTitle>
-        <form onSubmit={onAdd} className="mt-4 space-y-3">
-          <input
-            value={form.title}
-            onChange={(e) => set("title", e.target.value)}
-            placeholder="Job / appointment title"
-            className="profile-input"
-          />
-          <div className="grid grid-cols-2 gap-3">
-            <input
-              type="date"
-              value={form.date}
-              onChange={(e) => set("date", e.target.value)}
-              className="profile-input"
-            />
-            <input
-              type="time"
-              value={form.time}
-              onChange={(e) => set("time", e.target.value)}
-              className="profile-input"
-            />
-          </div>
-          <input
-            value={form.location}
-            onChange={(e) => set("location", e.target.value)}
-            placeholder="Location / address"
-            className="profile-input"
-          />
-          <input
-            value={form.assignee}
-            onChange={(e) => set("assignee", e.target.value)}
-            placeholder="Assigned to"
-            className="profile-input"
-          />
-          <textarea
-            value={form.notes}
-            onChange={(e) => set("notes", e.target.value)}
-            rows={2}
-            placeholder="Notes"
-            className="profile-input resize-none"
-          />
-          <button
-            type="submit"
-            disabled={saving}
-            className="flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-            style={{ backgroundColor: GREEN }}
-          >
-            <Plus size={16} />
-            {saving ? "Saving…" : "Add to schedule"}
-          </button>
-        </form>
-      </Card>
-
-      <Card>
-        <SectionTitle>Upcoming ({items.length})</SectionTitle>
-        {loading ? (
-          <p className="mt-4 text-sm text-gray-500">Loading…</p>
-        ) : items.length === 0 ? (
-          <p className="mt-4 text-sm text-gray-500">Nothing scheduled.</p>
-        ) : (
-          <ul className="mt-4 space-y-3">
-            {items.map((i) => (
-              <li key={i.id} className="rounded-xl border border-gray-100 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold">{i.title}</p>
-                    <p className="text-xs font-medium" style={{ color: GREEN }}>
-                      {i.date} {i.time && `· ${i.time}`}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => onDelete(i.id)}
-                    className="text-gray-400 transition hover:text-red-500"
-                    aria-label="Delete schedule item"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-                <div className="mt-2 space-y-0.5 text-xs text-gray-500">
-                  {i.location && <p>📍 {i.location}</p>}
-                  {i.assignee && <p>👷 {i.assignee}</p>}
-                  {i.notes && <p className="text-gray-700">{i.notes}</p>}
                 </div>
               </li>
             ))}
@@ -1780,5 +2084,818 @@ function EmployeeRow({
         </button>
       </div>
     </li>
+  );
+}
+
+/* ---------------- Lead Inbox ---------------- */
+
+const leadStatuses: QuoteRequestStatus[] = ["new", "contacted", "closed"];
+
+function LeadInboxTab() {
+  const [requests, setRequests] = useState<QuoteRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [pendingDelete, setPendingDelete] = useState<QuoteRequest | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    const unsub = subscribeToQuoteRequests((items) => {
+      setRequests(items);
+      setLoading(false);
+    });
+    return unsub;
+  }, []);
+
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      await deleteQuoteRequest(pendingDelete.id);
+      setPendingDelete(null);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const newCount = requests.filter((r) => r.status === "new").length;
+
+  return (
+    <Card>
+      {pendingDelete && (
+        <ConfirmDialog
+          title="Delete lead?"
+          message={`Remove the quote request from "${pendingDelete.name}"? This can't be undone.`}
+          confirmLabel={deleting ? "Deleting…" : "Delete"}
+          busy={deleting}
+          onCancel={() => !deleting && setPendingDelete(null)}
+          onConfirm={confirmDelete}
+        />
+      )}
+      <SectionTitle>
+        Lead Inbox ({requests.length}
+        {newCount > 0 ? ` · ${newCount} new` : ""})
+      </SectionTitle>
+      <p className="mt-1 text-sm text-gray-500">
+        Quote requests submitted from the homepage contact form.
+      </p>
+
+      {loading ? (
+        <p className="mt-4 text-sm text-gray-500">Loading…</p>
+      ) : requests.length === 0 ? (
+        <p className="mt-4 text-sm text-gray-500">
+          No leads yet. Submissions from the homepage will appear here.
+        </p>
+      ) : (
+        <ul className="mt-4 space-y-3">
+          {requests.map((r) => (
+            <li
+              key={r.id}
+              className={`rounded-xl border border-gray-100 p-4 ${
+                r.status === "new" ? "border-l-4 border-l-brand-primary" : ""
+              }`}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="font-semibold">{r.name}</p>
+                  {r.phone && (
+                    <a
+                      href={`tel:${r.phone.replace(/\D/g, "")}`}
+                      className="mt-0.5 flex items-center gap-1 text-sm text-brand-primary hover:underline"
+                    >
+                      <Phone size={14} />
+                      {r.phone}
+                    </a>
+                  )}
+                  <p className="mt-1 text-xs text-gray-400">
+                    {fmtDate(r.createdAt)}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={r.status}
+                    onChange={(e) =>
+                      updateQuoteRequestStatus(
+                        r.id,
+                        e.target.value as QuoteRequestStatus
+                      )
+                    }
+                    className="rounded-md border border-gray-200 px-2 py-1 text-xs font-semibold capitalize outline-none focus:border-gray-900"
+                  >
+                    {leadStatuses.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => setPendingDelete(r)}
+                    className="text-gray-400 transition hover:text-red-500"
+                    aria-label="Delete lead"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+/* ---------------- Analytics (owner demo dashboard) ---------------- */
+
+function StatCard({
+  label,
+  value,
+  hint,
+  accent,
+}: {
+  label: string;
+  value: number | string;
+  hint?: string;
+  accent?: "primary" | "accent" | "amber";
+}) {
+  const border =
+    accent === "amber"
+      ? "border-l-amber-500"
+      : accent === "accent"
+        ? "border-l-brand-accent"
+        : "border-l-brand-primary";
+  return (
+    <div
+      className={`rounded-xl border border-gray-100 bg-white p-5 shadow-sm border-l-4 ${border}`}
+    >
+      <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+        {label}
+      </p>
+      <p className="mt-2 text-3xl font-black text-gray-900">{value}</p>
+      {hint && <p className="mt-1 text-xs text-gray-500">{hint}</p>}
+    </div>
+  );
+}
+
+function HorizontalBar({
+  label,
+  count,
+  max,
+  color = GREEN,
+}: {
+  label: string;
+  count: number;
+  max: number;
+  color?: string;
+}) {
+  const pct = max > 0 ? Math.round((count / max) * 100) : 0;
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between text-sm">
+        <span className="font-medium capitalize text-gray-700">{label}</span>
+        <span className="font-semibold text-gray-900">{count}</span>
+      </div>
+      <div className="h-2.5 overflow-hidden rounded-full bg-gray-100">
+        <div
+          className="h-full rounded-full transition-all duration-500"
+          style={{ width: `${pct}%`, backgroundColor: color }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function FunnelStep({
+  label,
+  count,
+  total,
+  color,
+}: {
+  label: string;
+  count: number;
+  total: number;
+  color: string;
+}) {
+  const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+  return (
+    <div className="flex flex-col items-center flex-1 min-w-[5rem]">
+      <div
+        className="flex h-16 w-full items-center justify-center rounded-lg text-lg font-black text-white shadow-sm"
+        style={{
+          backgroundColor: color,
+          opacity: count > 0 ? 1 : 0.35,
+        }}
+      >
+        {count}
+      </div>
+      <p className="mt-2 text-center text-xs font-semibold capitalize text-gray-600">
+        {label}
+      </p>
+      <p className="text-[10px] text-gray-400">{pct}% of leads</p>
+    </div>
+  );
+}
+
+function AnalyticsDashboard({
+  metrics,
+  ticketTotal,
+  user,
+}: {
+  metrics: AnalyticsMetrics;
+  ticketTotal: number;
+  user: { displayName: string | null; email: string | null };
+}) {
+  const barColors = [
+    GREEN,
+    "#6366f1",
+    "#8b5cf6",
+    "#059669",
+    "#64748b",
+  ];
+
+  return (
+    <>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <StatCard
+          label="New leads"
+          value={metrics.newLeads}
+          hint={
+            metrics.leadsRecent7d > 0
+              ? `${metrics.leadsRecent7d} received in the last 7 days`
+              : "Homepage requests awaiting contact"
+          }
+          accent="primary"
+        />
+        <StatCard
+          label="Open tickets"
+          value={metrics.openTickets}
+          hint="Open or in progress"
+          accent="primary"
+        />
+        <StatCard
+          label="Needs attention"
+          value={metrics.needsAttention}
+          hint="Unread customer messages"
+          accent="amber"
+        />
+        <StatCard
+          label="Leads this month"
+          value={metrics.leadsThisMonth}
+          hint="All homepage quote requests"
+          accent="accent"
+        />
+        <StatCard
+          label="Signed-up clients"
+          value={metrics.signedUpClients}
+          hint="Accounts created on your site"
+          accent="primary"
+        />
+        <StatCard
+          label="Jobs this week"
+          value={metrics.jobsThisWeek}
+          hint="Scheduled on the calendar"
+          accent="accent"
+        />
+        <StatCard
+          label="Active jobs"
+          value={metrics.activeJobs ?? 0}
+          hint={`${metrics.totalJobs ?? 0} total job records`}
+          accent="primary"
+        />
+        <StatCard
+          label="New jobs (7 days)"
+          value={metrics.newJobsThisWeek ?? 0}
+          hint={`${metrics.linkedScheduleThisWeek ?? 0} linked schedule entries this week`}
+          accent="accent"
+        />
+        <StatCard
+          label="Google rating"
+          value={metrics.googleReviews.averageRating.toFixed(1)}
+          hint={`${metrics.googleReviews.fiveStarPercent}% five-star reviews`}
+          accent="primary"
+        />
+        <StatCard
+          label="Google reviews"
+          value={metrics.googleReviews.totalReviews}
+          hint={`${metrics.googleReviews.reviewsThisMonth} new this month (demo)`}
+          accent="accent"
+        />
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <SectionTitle>Lead funnel</SectionTitle>
+          <p className="mt-1 text-sm text-gray-500">
+            Homepage quote requests by status ({metrics.funnelTotal} total)
+          </p>
+          {metrics.funnelTotal === 0 ? (
+            <p className="mt-6 text-sm text-gray-500">
+              No leads yet. Submit the contact form on the homepage to see data
+              here.
+            </p>
+          ) : (
+            <div className="mt-6 flex gap-3">
+              <FunnelStep
+                label="New"
+                count={metrics.funnelNew}
+                total={metrics.funnelTotal}
+                color="#2563eb"
+              />
+              <div className="flex items-center pt-4 text-gray-300">→</div>
+              <FunnelStep
+                label="Contacted"
+                count={metrics.funnelContacted}
+                total={metrics.funnelTotal}
+                color="#6366f1"
+              />
+              <div className="flex items-center pt-4 text-gray-300">→</div>
+              <FunnelStep
+                label="Closed"
+                count={metrics.funnelClosed}
+                total={metrics.funnelTotal}
+                color="#059669"
+              />
+            </div>
+          )}
+        </Card>
+
+        <Card>
+          <SectionTitle>Tickets by status</SectionTitle>
+          <p className="mt-1 text-sm text-gray-500">
+            Pricing tickets across your pipeline ({ticketTotal} total)
+          </p>
+          {ticketTotal === 0 ? (
+            <p className="mt-6 text-sm text-gray-500">
+              No tickets yet. Customers can open one from the homepage after
+              signing in.
+            </p>
+          ) : (
+            <div className="mt-6 space-y-4">
+              {metrics.ticketCounts.map(({ status, count }, i) => (
+                <HorizontalBar
+                  key={status}
+                  label={status}
+                  count={count}
+                  max={metrics.ticketMax}
+                  color={barColors[i % barColors.length]}
+                />
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
+
+      <Card>
+        <SectionTitle>Jobs by postal code</SectionTitle>
+        <p className="mt-1 text-sm text-gray-500">
+          Where active work is concentrated ({metrics.totalJobs ?? 0} jobs)
+        </p>
+        {(metrics.jobsByPostalCode ?? []).length === 0 ? (
+          <p className="mt-6 text-sm text-gray-500">
+            No jobs yet. Create jobs in the Jobs tab with a postal code.
+          </p>
+        ) : (
+          <div className="mt-6 space-y-4">
+            {(metrics.jobsByPostalCode ?? []).map(({ postalCode, count }, i) => (
+              <HorizontalBar
+                key={postalCode}
+                label={postalCode}
+                count={count}
+                max={metrics.postalCodeMax ?? 1}
+                color={barColors[i % barColors.length]}
+              />
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <SectionTitle>Google Reviews</SectionTitle>
+            <p className="mt-1 text-sm text-gray-500">
+              Auto-synced from Google Business Profile in production — demo data
+              shown here.
+            </p>
+          </div>
+          <div className="flex flex-col items-stretch gap-2 sm:items-end">
+            <span className="inline-flex shrink-0 items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
+              <span className="h-2 w-2 rounded-full bg-amber-400" />
+              Demo · not connected
+            </span>
+            <GoogleReviewsPanelTrigger
+              userName={user.displayName}
+              userEmail={user.email}
+            />
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-6 md:grid-cols-2">
+          <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+              Overall rating
+            </p>
+            <p className="mt-2 text-4xl font-black text-gray-900">
+              {metrics.googleReviews.averageRating}
+              <span className="ml-1 text-lg font-semibold text-amber-400">
+                ★
+              </span>
+            </p>
+            <p className="mt-1 text-sm text-gray-500">
+              Based on {metrics.googleReviews.totalReviews} Google reviews
+            </p>
+          </div>
+          <div>
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-400">
+              Rating breakdown
+            </p>
+            <div className="space-y-2">
+              {metrics.googleReviews.ratingBreakdown.map(({ stars, count }) => (
+                <HorizontalBar
+                  key={stars}
+                  label={`${stars} star`}
+                  count={count}
+                  max={metrics.googleReviews.totalReviews}
+                  color={stars >= 4 ? "#f59e0b" : "#94a3b8"}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <p className="mt-5 text-xs text-gray-400">
+          When live, new Google reviews sync on a schedule and appear on your
+          homepage automatically. Reply from{" "}
+          <span className="font-medium text-gray-500">See individual reviews</span>{" "}
+          to post responses back to Google.
+        </p>
+      </Card>
+    </>
+  );
+}
+
+function AnalyticsTab({
+  user,
+}: {
+  user: { displayName: string | null; email: string | null };
+}) {
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [leads, setLeads] = useState<QuoteRequest[]>([]);
+  const [users, setUsers] = useState<StoredUser[]>([]);
+  const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [snapshots, setSnapshots] = useState<AnalyticsWeeklySnapshot[]>([]);
+  const [selectedWeek, setSelectedWeek] = useState<"live" | string>("live");
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const currentWeekId = getWeekId();
+
+  useEffect(() => {
+    let ready = 0;
+    const markReady = () => {
+      ready += 1;
+      if (ready >= 5) setLoading(false);
+    };
+
+    const u1 = subscribeToAllTickets((t) => {
+      setTickets(t);
+      markReady();
+    });
+    const u2 = subscribeToQuoteRequests((r) => {
+      setLeads(r);
+      markReady();
+    });
+    const u3 = subscribeToAllUsers((u) => {
+      setUsers(u);
+      markReady();
+    });
+    const u4 = subscribeToScheduleItems((s) => {
+      setSchedule(s);
+      markReady();
+    });
+    const u5 = subscribeToJobs((j) => {
+      setJobs(j);
+      markReady();
+    });
+    const u6 = subscribeToWeeklyAnalyticsSnapshots(setSnapshots);
+
+    return () => {
+      u1();
+      u2();
+      u3();
+      u4();
+      u5();
+      u6();
+    };
+  }, []);
+
+  const liveMetrics = useMemo(
+    () => computeAnalyticsMetrics(tickets, leads, users, schedule, jobs),
+    [tickets, leads, users, schedule, jobs]
+  );
+
+  useEffect(() => {
+    if (loading) return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      saveWeeklyAnalyticsSnapshot(
+        snapshotFromMetrics(currentWeekId, liveMetrics)
+      ).catch(() => {});
+    }, 2000);
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, [loading, currentWeekId, liveMetrics]);
+
+  const viewingLive = selectedWeek === "live";
+  const historical =
+    !viewingLive
+      ? snapshots.find((s) => s.weekId === selectedWeek)
+      : undefined;
+  const displayMetrics: AnalyticsMetrics | null = viewingLive
+    ? liveMetrics
+    : historical ?? null;
+  const normalizedMetrics = displayMetrics
+    ? {
+        ...displayMetrics,
+        totalJobs: displayMetrics.totalJobs ?? 0,
+        activeJobs: displayMetrics.activeJobs ?? 0,
+        newJobsThisWeek: displayMetrics.newJobsThisWeek ?? 0,
+        linkedScheduleThisWeek: displayMetrics.linkedScheduleThisWeek ?? 0,
+        jobsByPostalCode: displayMetrics.jobsByPostalCode ?? [],
+        postalCodeMax: displayMetrics.postalCodeMax ?? 1,
+        googleReviews:
+          displayMetrics.googleReviews ?? getGoogleReviewMetrics(),
+      }
+    : null;
+  const ticketTotal = normalizedMetrics
+    ? normalizedMetrics.ticketCounts.reduce((n, x) => n + x.count, 0)
+    : 0;
+
+  const pastWeeks = snapshots.filter((s) => s.weekId !== currentWeekId);
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <SectionTitle>Analytics</SectionTitle>
+            <p className="mt-1 text-sm text-gray-500">
+              Live overview of leads, tickets, and activity. Metrics for the
+              current week are saved automatically so you can review past weeks.
+            </p>
+          </div>
+          <div className="shrink-0">
+            <label htmlFor="analytics-week" className="sr-only">
+              Week
+            </label>
+            <select
+              id="analytics-week"
+              value={selectedWeek}
+              onChange={(e) => setSelectedWeek(e.target.value)}
+              className="w-full min-w-[14rem] rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-800 shadow-sm focus:border-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/20 sm:w-auto"
+            >
+              <option value="live">
+                This week (live) — {formatWeekLabel(currentWeekId)}
+              </option>
+              {pastWeeks.map((s) => (
+                <option key={s.weekId} value={s.weekId}>
+                  {s.weekLabel}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </Card>
+
+      {!viewingLive && historical && (
+        <div className="rounded-2xl border border-indigo-100 border-l-4 border-l-indigo-500 bg-indigo-50/40 p-6 shadow-sm">
+          <p className="text-sm font-semibold text-indigo-900">
+            Historical snapshot — {historical.weekLabel}
+          </p>
+          <p className="mt-1 text-xs text-indigo-700/80">
+            Saved{" "}
+            {new Date(historical.savedAt).toLocaleString(undefined, {
+              dateStyle: "medium",
+              timeStyle: "short",
+            })}
+            . Select &ldquo;This week (live)&rdquo; to return to real-time data.
+          </p>
+        </div>
+      )}
+
+      {!viewingLive && !historical && (
+        <Card>
+          <p className="text-sm text-gray-500">
+            No saved data for that week yet.
+          </p>
+        </Card>
+      )}
+
+      {loading ? (
+        <Card>
+          <p className="text-sm text-gray-500">Loading analytics…</p>
+        </Card>
+      ) : normalizedMetrics ? (
+        <AnalyticsDashboard
+          metrics={normalizedMetrics}
+          ticketTotal={ticketTotal}
+          user={user}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/* ---------------- Settings ---------------- */
+
+function SettingsTab({ role }: { role: Role }) {
+  const { theme, setTheme } = useTheme();
+  const [draft, setDraft] = useState(theme);
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  const isOwner = role === "owner";
+
+  useEffect(() => {
+    setDraft(theme);
+  }, [theme]);
+
+  const applyPreset = (primaryColor: string, accentColor: string) => {
+    setDraft((d) => ({ ...d, primaryColor, accentColor }));
+  };
+
+  const save = () => {
+    if (!isOwner) return;
+    setSaving(true);
+    setTheme({ ...draft, tagline: theme.tagline });
+    setSavedAt(Date.now());
+    setTimeout(() => setSavedAt(null), 2000);
+    setSaving(false);
+  };
+
+  const dirty =
+    draft.primaryColor !== theme.primaryColor ||
+    draft.accentColor !== theme.accentColor ||
+    draft.companyName !== theme.companyName;
+
+  return (
+    <Card>
+      <SectionTitle>Portal Settings</SectionTitle>
+      <p className="mt-1 text-sm text-gray-500">
+        {isOwner
+          ? "Customize colors and branding for the employee portal only — ideal for live client demos. The public website always stays Summit Build Co. blue & white. Saved locally in this browser."
+          : "View the current portal branding. Only the owner can change these settings. The public website is not affected."}
+      </p>
+
+      <div className="mt-6 grid gap-8 lg:grid-cols-2">
+        <div className="space-y-5">
+          <label className="block">
+            <span className="text-sm font-medium text-gray-700">Company name</span>
+            <input
+              value={draft.companyName}
+              onChange={(e) =>
+                setDraft((d) => ({ ...d, companyName: e.target.value }))
+              }
+              disabled={!isOwner}
+              className="profile-input mt-1.5"
+              placeholder="Summit Build Co."
+            />
+          </label>
+
+          <div className="grid grid-cols-2 gap-4">
+            <label className="block">
+              <span className="text-sm font-medium text-gray-700">Primary color</span>
+              <div className="mt-1.5 flex items-center gap-2">
+                <input
+                  type="color"
+                  value={draft.primaryColor}
+                  onChange={(e) =>
+                    setDraft((d) => ({ ...d, primaryColor: e.target.value }))
+                  }
+                  disabled={!isOwner}
+                  className="h-10 w-14 cursor-pointer rounded border border-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
+                />
+                <input
+                  value={draft.primaryColor}
+                  onChange={(e) =>
+                    setDraft((d) => ({ ...d, primaryColor: e.target.value }))
+                  }
+                  disabled={!isOwner}
+                  className="profile-input flex-1 font-mono text-xs"
+                />
+              </div>
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-gray-700">Accent color</span>
+              <div className="mt-1.5 flex items-center gap-2">
+                <input
+                  type="color"
+                  value={draft.accentColor}
+                  onChange={(e) =>
+                    setDraft((d) => ({ ...d, accentColor: e.target.value }))
+                  }
+                  disabled={!isOwner}
+                  className="h-10 w-14 cursor-pointer rounded border border-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
+                />
+                <input
+                  value={draft.accentColor}
+                  onChange={(e) =>
+                    setDraft((d) => ({ ...d, accentColor: e.target.value }))
+                  }
+                  disabled={!isOwner}
+                  className="profile-input flex-1 font-mono text-xs"
+                />
+              </div>
+            </label>
+          </div>
+
+          {isOwner && (
+            <div>
+              <p className="text-sm font-medium text-gray-700">Color presets</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {THEME_PRESETS.map((preset) => (
+                  <button
+                    key={preset.name}
+                    type="button"
+                    onClick={() =>
+                      applyPreset(preset.primaryColor, preset.accentColor)
+                    }
+                    className="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:border-gray-300 hover:bg-gray-50"
+                  >
+                    <span
+                      className="h-4 w-4 rounded-full border border-gray-200"
+                      style={{
+                        background: `linear-gradient(135deg, ${preset.primaryColor} 50%, ${preset.accentColor} 50%)`,
+                      }}
+                    />
+                    {preset.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {isOwner && (
+            <button
+              onClick={save}
+              disabled={!dirty || saving}
+              className="rounded-md px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+              style={{ backgroundColor: GREEN }}
+            >
+              {saving ? "Saving…" : savedAt ? "Saved!" : "Save settings"}
+            </button>
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+            Portal preview
+          </p>
+          <div className="mt-4 overflow-hidden rounded-xl border border-gray-100">
+            <div
+              className="h-1"
+              style={{ backgroundColor: draft.primaryColor }}
+            />
+            <div className="p-5">
+              <div className="flex items-center gap-2">
+                <span
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-xs font-black text-white"
+                  style={{ backgroundColor: draft.primaryColor }}
+                >
+                  {companyInitials(draft.companyName)}
+                </span>
+                <span className="font-bold">{draft.companyName}</span>
+              </div>
+              <div className="mt-4 flex gap-2">
+                <span
+                  className="rounded-md px-3 py-1.5 text-xs font-semibold text-white"
+                  style={{ backgroundColor: draft.primaryColor }}
+                >
+                  Primary button
+                </span>
+                <span
+                  className="rounded-md border-2 px-3 py-1.5 text-xs font-semibold"
+                  style={{
+                    borderColor: draft.accentColor,
+                    color: draft.accentColor,
+                  }}
+                >
+                  Accent button
+                </span>
+              </div>
+              <div
+                className="mt-4 rounded-lg p-3 text-xs text-white"
+                style={{
+                  background: `linear-gradient(135deg, ${draft.primaryColor}, ${draft.accentColor})`,
+                }}
+              >
+                Gradient section
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Card>
   );
 }

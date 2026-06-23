@@ -11,6 +11,7 @@ import {
   X,
 } from "lucide-react";
 import { useAuth } from "../lib/hooks/useAuth";
+import { DEFAULT_THEME } from "../lib/theme";
 import { isFirebaseConfigured } from "../lib/firebase/firebase";
 import {
   addTicketResponse,
@@ -25,14 +26,11 @@ import {
   type TicketResponse,
 } from "../lib/firebase/firebaseUtils";
 
-const GREEN = "#006847";
-const RED = "#CE1126";
-
 const projectTypes = [
   "Residential Build",
   "Commercial Project",
-  "Rapid Demolition",
-  "Off-the-Books Renovation",
+  "Renovation & Remodel",
+  "New Construction",
   "Other / Not Sure",
 ];
 
@@ -41,7 +39,7 @@ const budgets = [
   "$10k – $50k",
   "$50k – $200k",
   "$200k+",
-  "Cash, don't ask",
+  "Not sure yet",
 ];
 
 function formatDate(createdAt: Ticket["createdAt"]) {
@@ -54,6 +52,7 @@ function formatDate(createdAt: Ticket["createdAt"]) {
 }
 
 export default function PricingTicket() {
+  const theme = DEFAULT_THEME;
   const { user, loading, signInWithGoogle, signOut } = useAuth();
 
   const [projectType, setProjectType] = useState(projectTypes[0]);
@@ -145,7 +144,7 @@ export default function PricingTicket() {
   };
 
   return (
-    <section id="tickets" className="bg-gray-50 py-20">
+    <section id="tickets" className="py-20">
       {activeTicket && (
         <TicketEditModal
           ticket={activeTicket}
@@ -159,19 +158,18 @@ export default function PricingTicket() {
       <div className="mx-auto max-w-5xl px-6">
         <div className="text-center">
           <span
-            className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide"
-            style={{ borderColor: RED, color: RED }}
+            className="inline-flex items-center gap-2 rounded-full border border-brand-accent px-3 py-1 text-xs font-semibold uppercase tracking-wide text-brand-accent"
           >
             <TicketIcon size={14} />
             Pricing Tickets
           </span>
           <h2 className="mt-4 text-4xl font-black tracking-tight">
-            Request a <span style={{ color: GREEN }}>Pricing</span>{" "}
-            <span style={{ color: RED }}>Ticket</span>
+            Request a <span style={{ color: "var(--brand-primary)" }}>Pricing</span>{" "}
+            <span style={{ color: "var(--brand-accent)" }}>Ticket</span>
           </h2>
           <p className="mx-auto mt-3 max-w-xl text-gray-600">
             Sign in with Google to open a pricing ticket and track its status.
-            We&apos;ll quote your project — no permits, no problem.
+            Our team will follow up with a detailed quote.
           </p>
         </div>
 
@@ -195,11 +193,7 @@ export default function PricingTicket() {
             </div>
           ) : !user ? (
             <div className="rounded-2xl border border-gray-100 bg-white p-10 text-center shadow-sm">
-              <div className="flex h-2 w-full max-w-xs mx-auto mb-8">
-                <div className="flex-1" style={{ backgroundColor: GREEN }} />
-                <div className="flex-1 bg-gray-100" />
-                <div className="flex-1" style={{ backgroundColor: RED }} />
-              </div>
+              <div className="brand-bar mb-8 max-w-xs mx-auto" />
               <h3 className="text-xl font-bold">Sign in to open a ticket</h3>
               <p className="mx-auto mt-2 max-w-sm text-sm text-gray-600">
                 We use your Google account to keep your tickets tied to you so
@@ -220,7 +214,7 @@ export default function PricingTicket() {
               {signInError && (
                 <p
                   className="mx-auto mt-4 max-w-sm text-sm font-medium"
-                  style={{ color: RED }}
+                  style={{ color: "var(--brand-accent)" }}
                 >
                   {signInError}
                 </p>
@@ -241,7 +235,7 @@ export default function PricingTicket() {
                   ) : (
                     <div
                       className="flex h-9 w-9 items-center justify-center rounded-full font-bold text-white"
-                      style={{ backgroundColor: GREEN }}
+                      style={{ backgroundColor: "var(--brand-primary)" }}
                     >
                       {user.displayName?.[0] ?? "U"}
                     </div>
@@ -337,7 +331,7 @@ export default function PricingTicket() {
                 </div>
 
                 {error && (
-                  <p className="mt-4 text-sm font-medium" style={{ color: RED }}>
+                  <p className="mt-4 text-sm font-medium" style={{ color: "var(--brand-accent)" }}>
                     {error}
                   </p>
                 )}
@@ -346,7 +340,7 @@ export default function PricingTicket() {
                   type="submit"
                   disabled={submitting}
                   className="mt-6 w-full rounded-md px-6 py-3 text-sm font-semibold text-white shadow-md transition-transform hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-                  style={{ backgroundColor: GREEN }}
+                  style={{ backgroundColor: "var(--brand-primary)" }}
                 >
                   {submitting ? "Submitting…" : "Submit Ticket"}
                 </button>
@@ -366,23 +360,22 @@ export default function PricingTicket() {
                     {tickets.map((t) => (
                       <li
                         key={t.id}
-                        className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm"
-                        style={{ borderLeftColor: RED, borderLeftWidth: 4 }}
+                        className="rounded-xl border border-gray-100 border-l-4 border-l-brand-accent bg-white p-5 shadow-sm"
                       >
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <span className="flex items-center gap-2 font-semibold">
                             {hasUnreadCompanyResponse(t) && (
                               <span
                                 className="inline-block h-2.5 w-2.5 rounded-full animate-blink"
-                                style={{ backgroundColor: RED }}
-                                title="New response from Illegal Construction Co."
+                                style={{ backgroundColor: "var(--brand-accent)" }}
+                                title={`New response from ${theme.companyName}`}
                               />
                             )}
                             {t.projectType}
                           </span>
                           <span
                             className="rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize text-white"
-                            style={{ backgroundColor: GREEN }}
+                            style={{ backgroundColor: "var(--brand-primary)" }}
                           >
                             {t.status}
                           </span>
@@ -397,8 +390,7 @@ export default function PricingTicket() {
                           </div>
                           <button
                             onClick={() => setActiveTicket(t)}
-                            className="rounded-md border px-3 py-1.5 text-xs font-semibold transition hover:bg-gray-50"
-                            style={{ borderColor: GREEN, color: GREEN }}
+                            className="rounded-md border border-brand-primary px-3 py-1.5 text-xs font-semibold text-brand-primary transition hover:bg-brand-primary/5"
                           >
                             Open
                           </button>
@@ -431,6 +423,7 @@ function TicketEditModal({
   onDeleted: () => void;
   onViewed: () => void;
 }) {
+  const theme = DEFAULT_THEME;
   const [projectType, setProjectType] = useState(ticket.projectType);
   const [budget, setBudget] = useState(ticket.budget);
   const [description, setDescription] = useState(ticket.description);
@@ -529,11 +522,7 @@ function TicketEditModal({
         className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex h-1.5 w-full">
-          <div className="flex-1" style={{ backgroundColor: GREEN }} />
-          <div className="flex-1 bg-white" />
-          <div className="flex-1" style={{ backgroundColor: RED }} />
-        </div>
+        <div className="brand-bar" />
         <div className="max-h-[80vh] overflow-y-auto p-6">
           <div className="flex items-start justify-between">
             <div>
@@ -541,7 +530,7 @@ function TicketEditModal({
               <div className="mt-1 flex items-center gap-2 text-xs text-gray-400">
                 <span
                   className="rounded-full px-2 py-0.5 font-semibold capitalize text-white"
-                  style={{ backgroundColor: GREEN }}
+                  style={{ backgroundColor: "var(--brand-primary)" }}
                 >
                   {ticket.status}
                 </span>
@@ -623,16 +612,15 @@ function TicketEditModal({
                       }`}
                     >
                       <div
-                        className="max-w-[80%] rounded-2xl px-3 py-2 text-sm"
-                        style={
+                        className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
                           r.from === "company"
-                            ? { backgroundColor: GREEN, color: "white" }
-                            : { backgroundColor: "#f3f4f6", color: "#111827" }
-                        }
+                            ? "bg-brand-primary text-white"
+                            : "bg-gray-100 text-gray-900"
+                        }`}
                       >
                         <p className="text-[10px] font-semibold uppercase tracking-wide opacity-70">
                           {r.from === "company"
-                            ? r.authorName || "Illegal Construction Co."
+                            ? r.authorName || theme.companyName
                             : "You"}
                         </p>
                         <p className="mt-0.5 whitespace-pre-wrap">{r.text}</p>
@@ -662,7 +650,7 @@ function TicketEditModal({
                 onClick={sendReply}
                 disabled={sending || !reply.trim()}
                 className="flex items-center gap-1 rounded-md px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                style={{ backgroundColor: GREEN }}
+                style={{ backgroundColor: "var(--brand-primary)" }}
               >
                 <Send size={16} />
                 {sending ? "…" : "Send"}
@@ -671,14 +659,14 @@ function TicketEditModal({
           </div>
 
           {error && (
-            <p className="mt-4 text-sm font-medium" style={{ color: RED }}>
+            <p className="mt-4 text-sm font-medium" style={{ color: "var(--brand-accent)" }}>
               {error}
             </p>
           )}
 
           {confirmDelete ? (
             <div className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4">
-              <p className="text-sm font-semibold" style={{ color: RED }}>
+              <p className="text-sm font-semibold" style={{ color: "var(--brand-accent)" }}>
                 Delete this ticket permanently?
               </p>
               <p className="mt-1 text-xs text-gray-600">
@@ -689,7 +677,7 @@ function TicketEditModal({
                   onClick={handleDelete}
                   disabled={busy}
                   className="flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-                  style={{ backgroundColor: RED }}
+                  style={{ backgroundColor: "var(--brand-accent)" }}
                 >
                   <Trash2 size={16} />
                   {deleting ? "Deleting…" : "Yes, delete"}
@@ -709,7 +697,7 @@ function TicketEditModal({
                 onClick={() => setConfirmDelete(true)}
                 disabled={busy}
                 className="flex items-center gap-1.5 text-sm font-semibold transition hover:underline disabled:opacity-60"
-                style={{ color: RED }}
+                style={{ color: "var(--brand-accent)" }}
               >
                 <Trash2 size={16} />
                 Delete ticket
@@ -726,7 +714,7 @@ function TicketEditModal({
                   onClick={handleSave}
                   disabled={busy}
                   className="rounded-md px-5 py-2 text-sm font-semibold text-white shadow-sm transition disabled:opacity-60"
-                  style={{ backgroundColor: GREEN }}
+                  style={{ backgroundColor: "var(--brand-primary)" }}
                 >
                   {saving ? "Saving…" : "Save changes"}
                 </button>

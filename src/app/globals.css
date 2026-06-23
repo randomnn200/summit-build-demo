@@ -3,9 +3,10 @@
 @tailwind utilities;
 
 :root {
-  /* Mexican flag palette */
-  --mx-green: 0, 104, 71;
-  --mx-red: 206, 17, 38;
+  --brand-primary: #2563eb;
+  --brand-accent: #94a3b8;
+  --brand-primary-rgb: 37 99 235;
+  --brand-accent-rgb: 148 163 184;
   --foreground-rgb: 17, 24, 39;
   --background-rgb: 255, 255, 255;
 }
@@ -19,6 +20,20 @@ body {
   background: rgb(var(--background-rgb));
 }
 
+.site-canvas {
+  min-height: 100vh;
+  background-color: #f1f5f9;
+  background-image:
+    radial-gradient(ellipse 90% 60% at 0% -5%, rgb(var(--brand-primary-rgb) / 0.14), transparent 55%),
+    radial-gradient(ellipse 70% 50% at 100% 0%, rgb(var(--brand-accent-rgb) / 0.12), transparent 50%),
+    radial-gradient(ellipse 80% 40% at 50% 100%, rgb(var(--brand-primary-rgb) / 0.08), transparent 60%),
+    linear-gradient(180deg, #f8fafc 0%, #eef2ff 35%, #f1f5f9 70%, #f8fafc 100%);
+}
+
+.section-surface {
+  @apply rounded-3xl border border-white/70 bg-white/75 shadow-sm backdrop-blur-sm;
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;
@@ -28,6 +43,18 @@ body {
 @layer components {
   .profile-input {
     @apply w-full rounded-md border border-gray-200 px-3 py-2 text-sm outline-none transition focus:border-gray-900;
+  }
+
+  .brand-bar {
+    @apply h-1 w-full bg-brand-primary;
+  }
+
+  .btn-brand-primary {
+    @apply rounded-md bg-brand-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition-transform hover:scale-105;
+  }
+
+  .btn-brand-accent {
+    @apply rounded-md border-2 border-brand-accent px-4 py-2 text-sm font-semibold text-brand-accent transition-colors hover:bg-gray-50;
   }
 }
 
