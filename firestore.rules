@@ -21,7 +21,18 @@ service cloud.firestore {
         'savedQuotes',
         'jobs',
         'timeOffRequests',
-        'googleReviewReplies'
+        'googleReviewReplies',
+        'changeOrders',
+        'projectDocuments',
+        'jobBudgets',
+        'jobCostEntries',
+        'subcontractors',
+        'toolCheckouts',
+        'crmLeads',
+        'crmEstimates',
+        'crmReminders',
+        'crmEmailTemplates',
+        'crmProposals'
       ];
     }
 

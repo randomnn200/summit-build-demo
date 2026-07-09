@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { formatPhone } from "../lib/formatPhone";
+import PhoneInput from "./PhoneInput";
 import { isFirebaseConfigured } from "../lib/firebase/firebase";
 import { addQuoteRequest } from "../lib/firebase/firebaseUtils";
 
@@ -60,11 +60,9 @@ export default function QuoteContactForm() {
           className="profile-input flex-1"
           disabled={submitting}
         />
-        <input
-          type="tel"
-          placeholder="(555) 555-5555"
+        <PhoneInput
           value={phone}
-          onChange={(e) => setPhone(formatPhone(e.target.value))}
+          onChange={setPhone}
           className="profile-input flex-1"
           disabled={submitting}
         />

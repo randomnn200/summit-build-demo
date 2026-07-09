@@ -4,11 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Briefcase,
+  HardHat,
   BarChart3,
   Calculator,
   CalendarClock,
   ClipboardList,
   Contact,
+  Handshake,
   Home,
   Inbox,
   Mail,
@@ -30,17 +32,18 @@ import {
 import { useAuth } from "../lib/hooks/useAuth";
 import { useRole } from "../lib/hooks/useRole";
 import { useTheme } from "../lib/hooks/useTheme";
-import { formatPhone } from "../lib/formatPhone";
+import PhoneInput from "./PhoneInput";
 import { companyInitials, THEME_PRESETS } from "../lib/theme";
 import {
   computeAnalyticsMetrics,
   formatWeekLabel,
+  fmtAnalyticsMoney,
   getWeekId,
+  normalizeAnalyticsMetrics,
   snapshotFromMetrics,
   type AnalyticsMetrics,
   type AnalyticsWeeklySnapshot,
 } from "../lib/analyticsMetrics";
-import { getGoogleReviewMetrics } from "../lib/googleReviewsDemo";
 import { GoogleReviewsPanelTrigger } from "./GoogleReviewsPanel";
 import GoogleReviewsTab from "./GoogleReviewsTab";
 import InventoryTab from "./InventoryTab";
@@ -48,6 +51,9 @@ import ExpensesTab from "./ExpensesTab";
 import QuoteHelperTab from "./QuoteHelperTab";
 import JobsTab from "./JobsTab";
 import ScheduleTab from "./ScheduleTab";
+import ProjectOpsTab from "./ProjectOpsTab";
+import CrmTab from "./CrmTab";
+import AnalyticsReport from "./AnalyticsReport";
 import {
   addCallNote,
   addEmployee,
@@ -69,18 +75,26 @@ import {
   setUserRole,
   subscribeToAllTickets,
   subscribeToAllUsers,
+  subscribeToCallNotes,
+  subscribeToExpenses,
+  subscribeToInventoryItems,
   subscribeToJobs,
+  subscribeToPurchaseOrders,
   subscribeToQuoteRequests,
   subscribeToSavedQuotes,
   subscribeToScheduleItems,
   subscribeToTicket,
+  subscribeToTimeOffRequests,
   saveWeeklyAnalyticsSnapshot,
   subscribeToWeeklyAnalyticsSnapshots,
   ticketStatuses,
   updateQuoteRequestStatus,
   updateTicketStatus,
   type CallNote,
+  type Expense,
+  type InventoryItem,
   type Job,
+  type PurchaseOrder,
   type QuoteRequest,
   type QuoteRequestStatus,
   type SavedQuote,
@@ -90,13 +104,36 @@ import {
   type StoredUser,
   type Ticket,
   type TicketResponse,
+  type TimeOffRequest,
   type UserProfile,
 } from "../lib/firebase/firebaseUtils";
+import {
+  subscribeToChangeOrders,
+  subscribeToJobBudgets,
+  subscribeToProjectDocuments,
+  subscribeToSubcontractors,
+  subscribeToToolCheckouts,
+  type ChangeOrder,
+  type JobBudget,
+  type ProjectDocument,
+  type Subcontractor,
+  type ToolCheckout,
+} from "../lib/firebase/constructionOpsFirestore";
+import {
+  subscribeToCrmEstimates,
+  subscribeToCrmLeads,
+  subscribeToCrmProposals,
+  subscribeToCrmReminders,
+  type CrmEstimate,
+  type CrmLead,
+  type CrmProposal,
+  type CrmReminder,
+} from "../lib/firebase/crmFirestore";
 
 const GREEN = "var(--brand-primary)";
 const RED = "var(--brand-accent)";
 
-type Tab = "tickets" | "clients" | "leads" | "calls" | "jobs" | "schedule" | "inventory" | "expenses" | "quotes" | "reviews" | "analytics" | "users" | "team" | "settings";
+type Tab = "tickets" | "clients" | "leads" | "crm" | "calls" | "jobs" | "ops" | "schedule" | "inventory" | "expenses" | "quotes" | "reviews" | "analytics" | "users" | "team" | "settings";
 
 function fmtDate(createdAt: { seconds: number } | null) {
   if (!createdAt?.seconds) return "—";
@@ -112,6 +149,11 @@ export default function EmployeePortal() {
   const { role, config, setConfig, loading: roleLoading, error } = useRole();
   const { theme } = useTheme();
   const [tab, setTab] = useState<Tab>("tickets");
+  const [analyticsWide, setAnalyticsWide] = useState(false);
+
+  useEffect(() => {
+    if (tab !== "analytics") setAnalyticsWide(false);
+  }, [tab]);
 
   const loading = authLoading || roleLoading;
   const isStaff = role === "owner" || role === "employee";
@@ -184,8 +226,10 @@ export default function EmployeePortal() {
     { id: "tickets", label: "Tickets", icon: <ClipboardList size={16} /> },
     { id: "clients", label: "Clients", icon: <Contact size={16} /> },
     { id: "leads", label: "Lead Inbox", icon: <Inbox size={16} /> },
+    { id: "crm", label: "CRM", icon: <Handshake size={16} /> },
     { id: "calls", label: "Call Notes", icon: <Phone size={16} /> },
     { id: "jobs", label: "Jobs", icon: <Briefcase size={16} /> },
+    { id: "ops", label: "Project Ops", icon: <HardHat size={16} /> },
     { id: "schedule", label: "Schedule", icon: <CalendarClock size={16} /> },
     { id: "inventory", label: "Inventory", icon: <Package size={16} /> },
     { id: "expenses", label: "Expenses", icon: <Receipt size={16} /> },
@@ -202,6 +246,7 @@ export default function EmployeePortal() {
       user={{ email: user.email, role }}
       onSignOut={signOut}
       companyName={theme.companyName}
+      wide={analyticsWide}
     >
       <div className="mb-6 flex flex-wrap gap-2">
         {tabs
@@ -238,12 +283,26 @@ export default function EmployeePortal() {
         />
       )}
       {tab === "leads" && <LeadInboxTab />}
+      {tab === "crm" && (
+        <CrmTab
+          userName={user.displayName}
+          userEmail={user.email}
+          companyName={theme.companyName}
+        />
+      )}
       {tab === "calls" && <CallNotesTab createdByName={user.displayName} />}
       {tab === "jobs" && (
         <JobsTab
           userName={user.displayName}
           userEmail={user.email}
           role={role}
+        />
+      )}
+      {tab === "ops" && (
+        <ProjectOpsTab
+          userName={user.displayName}
+          userEmail={user.email}
+          companyName={theme.companyName}
         />
       )}
       {tab === "schedule" && (
@@ -280,7 +339,12 @@ export default function EmployeePortal() {
           userEmail={user.email}
         />
       )}
-      {tab === "analytics" && role === "owner" && <AnalyticsTab user={user} />}
+      {tab === "analytics" && role === "owner" && (
+        <AnalyticsTab
+          user={user}
+          onViewChange={(view) => setAnalyticsWide(view === "report")}
+        />
+      )}
       {tab === "users" && role === "owner" && (
         <UsersTab config={config} setConfig={setConfig} />
       )}
@@ -301,12 +365,16 @@ function PortalShell({
   user,
   onSignOut,
   companyName,
+  wide = false,
 }: {
   children: React.ReactNode;
   user?: { email: string | null; role: string };
   onSignOut?: () => void;
   companyName?: string;
+  wide?: boolean;
 }) {
+  const contentWidth = wide ? "max-w-none" : "max-w-6xl";
+  const contentPad = wide ? "px-4 lg:px-6" : "px-6";
   const { theme } = useTheme();
   const displayName = companyName ?? theme.companyName;
   const initials = companyInitials(displayName);
@@ -315,7 +383,7 @@ function PortalShell({
     <main className="min-h-screen bg-gray-50">
       <div className="brand-bar" />
       <header className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+        <div className={`mx-auto flex ${contentWidth} items-center justify-between ${contentPad} py-4`}>
           <div className="flex items-center gap-2">
             <span
               className="flex h-8 w-8 items-center justify-center rounded-md text-sm font-black text-white"
@@ -359,7 +427,7 @@ function PortalShell({
           </div>
         </div>
       </header>
-      <div className="mx-auto max-w-6xl px-6 py-8">{children}</div>
+      <div className={`mx-auto ${contentWidth} ${contentPad} ${wide ? "py-4" : "py-8"}`}>{children}</div>
     </main>
   );
 }
@@ -1559,6 +1627,7 @@ function CallNotesTab({ createdByName }: { createdByName: string | null }) {
   const [phone, setPhone] = useState("");
   const [summary, setSummary] = useState("");
   const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState("");
   const [pendingDelete, setPendingDelete] = useState<CallNote | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -1576,6 +1645,21 @@ function CallNotesTab({ createdByName }: { createdByName: string | null }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  const filteredNotes = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return notes;
+    const qDigits = q.replace(/\D/g, "");
+    return notes.filter((n) => {
+      const name = (n.customerName || "").toLowerCase();
+      const phoneText = (n.phone || "").toLowerCase();
+      const phoneDigits = (n.phone || "").replace(/\D/g, "");
+      if (name.includes(q)) return true;
+      if (qDigits && phoneDigits.includes(qDigits)) return true;
+      if (phoneText.includes(q)) return true;
+      return false;
+    });
+  }, [notes, search]);
 
   const onAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1634,12 +1718,9 @@ function CallNotesTab({ createdByName }: { createdByName: string | null }) {
               placeholder="Customer name"
               className="profile-input"
             />
-            <input
-              type="tel"
+            <PhoneInput
               value={phone}
-              onChange={(e) => setPhone(formatPhone(e.target.value))}
-              placeholder="(555) 555-5555"
-              className="profile-input"
+              onChange={setPhone}
             />
           </div>
           <textarea
@@ -1662,14 +1743,30 @@ function CallNotesTab({ createdByName }: { createdByName: string | null }) {
       </Card>
 
       <Card>
-        <SectionTitle>Call Notes ({notes.length})</SectionTitle>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <SectionTitle>Call Notes ({filteredNotes.length})</SectionTitle>
+          <div className="relative min-w-[12rem] flex-1 sm:max-w-xs">
+            <Search
+              size={14}
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400"
+            />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search name or phone…"
+              className="w-full rounded-md border border-gray-200 py-1.5 pl-8 pr-3 text-xs"
+            />
+          </div>
+        </div>
         {loading ? (
           <p className="mt-4 text-sm text-gray-500">Loading…</p>
         ) : notes.length === 0 ? (
           <p className="mt-4 text-sm text-gray-500">No call notes yet.</p>
+        ) : filteredNotes.length === 0 ? (
+          <p className="mt-4 text-sm text-gray-500">No call notes match your search.</p>
         ) : (
           <ul className="mt-4 space-y-3">
-            {notes.map((n) => (
+            {filteredNotes.map((n) => (
               <li key={n.id} className="rounded-xl border border-gray-100 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -2296,6 +2393,34 @@ function FunnelStep({
   );
 }
 
+function MoneyBar({
+  label,
+  amount,
+  max,
+  color = GREEN,
+}: {
+  label: string;
+  amount: number;
+  max: number;
+  color?: string;
+}) {
+  const pct = max > 0 ? Math.round((amount / max) * 100) : 0;
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between text-sm">
+        <span className="font-medium text-gray-700">{label}</span>
+        <span className="font-semibold text-gray-900">{fmtAnalyticsMoney(amount)}</span>
+      </div>
+      <div className="h-2.5 overflow-hidden rounded-full bg-gray-100">
+        <div
+          className="h-full rounded-full transition-all duration-500"
+          style={{ width: `${pct}%`, backgroundColor: color }}
+        />
+      </div>
+    </div>
+  );
+}
+
 function AnalyticsDashboard({
   metrics,
   ticketTotal,
@@ -2382,6 +2507,148 @@ function AnalyticsDashboard({
         />
       </div>
 
+      <div>
+        <p className="mb-3 text-xs font-bold uppercase tracking-wide text-gray-400">
+          Financial & quotes
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label="Expenses this month"
+            value={fmtAnalyticsMoney(metrics.expenseAmountThisMonth)}
+            hint={`${metrics.expensesThisMonth} entries logged`}
+            accent="primary"
+          />
+          <StatCard
+            label="Saved quotes"
+            value={metrics.savedQuotesTotal}
+            hint={`${metrics.savedQuotesThisMonth} saved this month`}
+            accent="accent"
+          />
+          <StatCard
+            label="Open purchase orders"
+            value={metrics.purchaseOrdersOpen}
+            hint={`${metrics.purchaseOrdersTotal} total POs`}
+            accent="primary"
+          />
+          <StatCard
+            label="Job budgets set"
+            value={metrics.jobBudgetsSet}
+            hint="Jobs with budget tracking in Project Ops"
+            accent="accent"
+          />
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-3 text-xs font-bold uppercase tracking-wide text-gray-400">
+          CRM
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label="CRM pipeline"
+            value={metrics.crmLeadsTotal}
+            hint="Leads in CRM pipeline"
+            accent="primary"
+          />
+          <StatCard
+            label="Estimates sent"
+            value={metrics.crmEstimatesSent}
+            hint={`${metrics.crmEstimatesTotal} total estimates`}
+            accent="accent"
+          />
+          <StatCard
+            label="Proposals accepted"
+            value={metrics.crmProposalsAccepted}
+            hint={`${metrics.crmProposalsTotal} total proposals`}
+            accent="primary"
+          />
+          <StatCard
+            label="CRM reminders"
+            value={metrics.crmRemindersDue}
+            hint={
+              metrics.crmRemindersOverdue > 0
+                ? `${metrics.crmRemindersOverdue} overdue`
+                : "Due today or earlier"
+            }
+            accent={metrics.crmRemindersOverdue > 0 ? "amber" : "accent"}
+          />
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-3 text-xs font-bold uppercase tracking-wide text-gray-400">
+          Project ops
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label="Change orders pending"
+            value={metrics.changeOrdersPending}
+            hint={`${metrics.changeOrdersTotal} total change orders`}
+            accent="amber"
+          />
+          <StatCard
+            label="Approved CO value"
+            value={fmtAnalyticsMoney(metrics.changeOrdersApprovedValue)}
+            hint="Sum of approved change orders"
+            accent="primary"
+          />
+          <StatCard
+            label="Project documents"
+            value={metrics.projectDocumentsTotal}
+            hint="Drawings, permits, contracts, and more"
+            accent="accent"
+          />
+          <StatCard
+            label="Tools checked out"
+            value={metrics.toolsOutNow}
+            hint={
+              metrics.toolsOverdue > 0
+                ? `${metrics.toolsOverdue} overdue returns`
+                : `${metrics.subcontractorsTotal} subcontractors on file`
+            }
+            accent={metrics.toolsOverdue > 0 ? "amber" : "primary"}
+          />
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-3 text-xs font-bold uppercase tracking-wide text-gray-400">
+          Team & inventory
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label="Call notes"
+            value={metrics.callNotesTotal}
+            hint={`${metrics.callNotesThisWeek} logged in the last 7 days`}
+            accent="primary"
+          />
+          <StatCard
+            label="Time off pending"
+            value={metrics.timeOffPending}
+            hint="Awaiting owner approval"
+            accent="amber"
+          />
+          <StatCard
+            label="Inventory SKUs"
+            value={metrics.inventoryItemsTotal}
+            hint={
+              metrics.inventoryLowStock > 0
+                ? `${metrics.inventoryLowStock} at or below reorder level`
+                : "Tracked in inventory"
+            }
+            accent={metrics.inventoryLowStock > 0 ? "amber" : "accent"}
+          />
+          <StatCard
+            label="Subs payment overdue"
+            value={metrics.subcontractorsPaymentOverdue}
+            hint={`${metrics.subcontractorsTotal} subcontractors on file`}
+            accent={
+              metrics.subcontractorsPaymentOverdue > 0 ? "amber" : "primary"
+            }
+          />
+        </div>
+      </div>
+
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <SectionTitle>Lead funnel</SectionTitle>
@@ -2445,29 +2712,105 @@ function AnalyticsDashboard({
         </Card>
       </div>
 
-      <Card>
-        <SectionTitle>Jobs by postal code</SectionTitle>
-        <p className="mt-1 text-sm text-gray-500">
-          Where active work is concentrated ({metrics.totalJobs ?? 0} jobs)
-        </p>
-        {(metrics.jobsByPostalCode ?? []).length === 0 ? (
-          <p className="mt-6 text-sm text-gray-500">
-            No jobs yet. Create jobs in the Jobs tab with a postal code.
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <SectionTitle>CRM pipeline</SectionTitle>
+          <p className="mt-1 text-sm text-gray-500">
+            Leads by stage ({metrics.crmLeadsTotal} in CRM)
           </p>
-        ) : (
-          <div className="mt-6 space-y-4">
-            {(metrics.jobsByPostalCode ?? []).map(({ postalCode, count }, i) => (
-              <HorizontalBar
-                key={postalCode}
-                label={postalCode}
-                count={count}
-                max={metrics.postalCodeMax ?? 1}
-                color={barColors[i % barColors.length]}
-              />
-            ))}
-          </div>
-        )}
-      </Card>
+          {metrics.crmLeadsTotal === 0 ? (
+            <p className="mt-6 text-sm text-gray-500">
+              No CRM leads yet. Import from Lead Inbox or add leads in the CRM tab.
+            </p>
+          ) : (
+            <div className="mt-6 space-y-4">
+              {metrics.crmPipelineCounts.map(({ label, count }, i) => (
+                <HorizontalBar
+                  key={label}
+                  label={label}
+                  count={count}
+                  max={metrics.crmPipelineMax}
+                  color={barColors[i % barColors.length]}
+                />
+              ))}
+            </div>
+          )}
+        </Card>
+
+        <Card>
+          <SectionTitle>Expenses by category</SectionTitle>
+          <p className="mt-1 text-sm text-gray-500">
+            Spending this month ({fmtAnalyticsMoney(metrics.expenseAmountThisMonth)})
+          </p>
+          {metrics.expensesByCategory.length === 0 ? (
+            <p className="mt-6 text-sm text-gray-500">
+              No expenses logged this month yet.
+            </p>
+          ) : (
+            <div className="mt-6 space-y-4">
+              {metrics.expensesByCategory.map(({ category, total }, i) => (
+                <MoneyBar
+                  key={category}
+                  label={category}
+                  amount={total}
+                  max={metrics.expenseCategoryMax}
+                  color={barColors[i % barColors.length]}
+                />
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <SectionTitle>Change orders</SectionTitle>
+          <p className="mt-1 text-sm text-gray-500">
+            Status breakdown ({metrics.changeOrdersTotal} total)
+          </p>
+          {metrics.changeOrdersTotal === 0 ? (
+            <p className="mt-6 text-sm text-gray-500">
+              No change orders yet. Create them in Project Ops.
+            </p>
+          ) : (
+            <div className="mt-6 space-y-4">
+              {metrics.changeOrderCounts.map(({ label, count }, i) => (
+                <HorizontalBar
+                  key={label}
+                  label={label}
+                  count={count}
+                  max={metrics.changeOrderMax}
+                  color={barColors[i % barColors.length]}
+                />
+              ))}
+            </div>
+          )}
+        </Card>
+
+        <Card>
+          <SectionTitle>Jobs by postal code</SectionTitle>
+          <p className="mt-1 text-sm text-gray-500">
+            Where active work is concentrated ({metrics.totalJobs ?? 0} jobs)
+          </p>
+          {(metrics.jobsByPostalCode ?? []).length === 0 ? (
+            <p className="mt-6 text-sm text-gray-500">
+              No jobs yet. Create jobs in the Jobs tab with a postal code.
+            </p>
+          ) : (
+            <div className="mt-6 space-y-4">
+              {(metrics.jobsByPostalCode ?? []).map(({ postalCode, count }, i) => (
+                <HorizontalBar
+                  key={postalCode}
+                  label={postalCode}
+                  count={count}
+                  max={metrics.postalCodeMax ?? 1}
+                  color={barColors[i % barColors.length]}
+                />
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
 
       <Card>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -2534,28 +2877,93 @@ function AnalyticsDashboard({
   );
 }
 
+function ViewToggle({
+  view,
+  onChange,
+}: {
+  view: "overview" | "report";
+  onChange: (view: "overview" | "report") => void;
+}) {
+  return (
+    <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
+      <button
+        type="button"
+        onClick={() => onChange("overview")}
+        className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+          view === "overview"
+            ? "bg-white text-gray-900 shadow-sm"
+            : "text-gray-500 hover:text-gray-700"
+        }`}
+      >
+        Overview
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange("report")}
+        className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+          view === "report"
+            ? "bg-white text-gray-900 shadow-sm"
+            : "text-gray-500 hover:text-gray-700"
+        }`}
+      >
+        Report
+      </button>
+    </div>
+  );
+}
+
 function AnalyticsTab({
   user,
+  onViewChange,
 }: {
   user: { displayName: string | null; email: string | null };
+  onViewChange?: (view: "overview" | "report") => void;
 }) {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [leads, setLeads] = useState<QuoteRequest[]>([]);
   const [users, setUsers] = useState<StoredUser[]>([]);
   const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [savedQuotes, setSavedQuotes] = useState<SavedQuote[]>([]);
+  const [callNotes, setCallNotes] = useState<CallNote[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
+  const [changeOrders, setChangeOrders] = useState<ChangeOrder[]>([]);
+  const [projectDocuments, setProjectDocuments] = useState<ProjectDocument[]>([]);
+  const [jobBudgets, setJobBudgets] = useState<Record<string, JobBudget>>({});
+  const [toolCheckouts, setToolCheckouts] = useState<ToolCheckout[]>([]);
+  const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
+  const [crmLeads, setCrmLeads] = useState<CrmLead[]>([]);
+  const [crmEstimates, setCrmEstimates] = useState<CrmEstimate[]>([]);
+  const [crmReminders, setCrmReminders] = useState<CrmReminder[]>([]);
+  const [crmProposals, setCrmProposals] = useState<CrmProposal[]>([]);
+  const [timeOffRequests, setTimeOffRequests] = useState<TimeOffRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [snapshots, setSnapshots] = useState<AnalyticsWeeklySnapshot[]>([]);
   const [selectedWeek, setSelectedWeek] = useState<"live" | string>("live");
+  const [analyticsView, setAnalyticsView] = useState<"overview" | "report">(
+    "overview"
+  );
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const setView = (view: "overview" | "report") => {
+    setAnalyticsView(view);
+    onViewChange?.(view);
+  };
+
+  useEffect(() => {
+    onViewChange?.(analyticsView);
+  }, [analyticsView, onViewChange]);
+
   const currentWeekId = getWeekId();
+  const SOURCE_COUNT = 20;
 
   useEffect(() => {
     let ready = 0;
     const markReady = () => {
       ready += 1;
-      if (ready >= 5) setLoading(false);
+      if (ready >= SOURCE_COUNT) setLoading(false);
     };
 
     const u1 = subscribeToAllTickets((t) => {
@@ -2578,7 +2986,67 @@ function AnalyticsTab({
       setJobs(j);
       markReady();
     });
-    const u6 = subscribeToWeeklyAnalyticsSnapshots(setSnapshots);
+    const u6 = subscribeToExpenses((list) => {
+      setExpenses(list);
+      markReady();
+    });
+    const u7 = subscribeToSavedQuotes((list) => {
+      setSavedQuotes(list);
+      markReady();
+    });
+    const u8 = subscribeToCallNotes((list) => {
+      setCallNotes(list);
+      markReady();
+    });
+    const u9 = subscribeToInventoryItems((list) => {
+      setInventory(list);
+      markReady();
+    });
+    const u10 = subscribeToPurchaseOrders((list) => {
+      setPurchaseOrders(list);
+      markReady();
+    });
+    const u11 = subscribeToChangeOrders((list) => {
+      setChangeOrders(list);
+      markReady();
+    });
+    const u12 = subscribeToProjectDocuments((list) => {
+      setProjectDocuments(list);
+      markReady();
+    });
+    const u13 = subscribeToJobBudgets((map) => {
+      setJobBudgets(map);
+      markReady();
+    });
+    const u14 = subscribeToToolCheckouts((list) => {
+      setToolCheckouts(list);
+      markReady();
+    });
+    const u15 = subscribeToSubcontractors((list) => {
+      setSubcontractors(list);
+      markReady();
+    });
+    const u16 = subscribeToCrmLeads((list) => {
+      setCrmLeads(list);
+      markReady();
+    });
+    const u17 = subscribeToCrmEstimates((list) => {
+      setCrmEstimates(list);
+      markReady();
+    });
+    const u18 = subscribeToCrmReminders((list) => {
+      setCrmReminders(list);
+      markReady();
+    });
+    const u19 = subscribeToCrmProposals((list) => {
+      setCrmProposals(list);
+      markReady();
+    });
+    const u20 = subscribeToTimeOffRequests((list) => {
+      setTimeOffRequests(list);
+      markReady();
+    });
+    const u21 = subscribeToWeeklyAnalyticsSnapshots(setSnapshots);
 
     return () => {
       u1();
@@ -2587,12 +3055,65 @@ function AnalyticsTab({
       u4();
       u5();
       u6();
+      u7();
+      u8();
+      u9();
+      u10();
+      u11();
+      u12();
+      u13();
+      u14();
+      u15();
+      u16();
+      u17();
+      u18();
+      u19();
+      u20();
+      u21();
     };
   }, []);
 
   const liveMetrics = useMemo(
-    () => computeAnalyticsMetrics(tickets, leads, users, schedule, jobs),
-    [tickets, leads, users, schedule, jobs]
+    () =>
+      computeAnalyticsMetrics(tickets, leads, users, schedule, jobs, {
+        expenses,
+        savedQuotes,
+        callNotes,
+        inventory,
+        purchaseOrders,
+        changeOrders,
+        projectDocuments,
+        jobBudgets: Object.values(jobBudgets),
+        toolCheckouts,
+        subcontractors,
+        crmLeads,
+        crmEstimates,
+        crmReminders,
+        crmProposals,
+        timeOffRequests,
+      }),
+    [
+      tickets,
+      leads,
+      users,
+      schedule,
+      jobs,
+      expenses,
+      savedQuotes,
+      callNotes,
+      inventory,
+      purchaseOrders,
+      changeOrders,
+      projectDocuments,
+      jobBudgets,
+      toolCheckouts,
+      subcontractors,
+      crmLeads,
+      crmEstimates,
+      crmReminders,
+      crmProposals,
+      timeOffRequests,
+    ]
   );
 
   useEffect(() => {
@@ -2617,17 +3138,7 @@ function AnalyticsTab({
     ? liveMetrics
     : historical ?? null;
   const normalizedMetrics = displayMetrics
-    ? {
-        ...displayMetrics,
-        totalJobs: displayMetrics.totalJobs ?? 0,
-        activeJobs: displayMetrics.activeJobs ?? 0,
-        newJobsThisWeek: displayMetrics.newJobsThisWeek ?? 0,
-        linkedScheduleThisWeek: displayMetrics.linkedScheduleThisWeek ?? 0,
-        jobsByPostalCode: displayMetrics.jobsByPostalCode ?? [],
-        postalCodeMax: displayMetrics.postalCodeMax ?? 1,
-        googleReviews:
-          displayMetrics.googleReviews ?? getGoogleReviewMetrics(),
-      }
+    ? normalizeAnalyticsMetrics(displayMetrics)
     : null;
   const ticketTotal = normalizedMetrics
     ? normalizedMetrics.ticketCounts.reduce((n, x) => n + x.count, 0)
@@ -2636,40 +3147,48 @@ function AnalyticsTab({
   const pastWeeks = snapshots.filter((s) => s.weekId !== currentWeekId);
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <SectionTitle>Analytics</SectionTitle>
-            <p className="mt-1 text-sm text-gray-500">
-              Live overview of leads, tickets, and activity. Metrics for the
-              current week are saved automatically so you can review past weeks.
-            </p>
-          </div>
-          <div className="shrink-0">
-            <label htmlFor="analytics-week" className="sr-only">
-              Week
-            </label>
-            <select
-              id="analytics-week"
-              value={selectedWeek}
-              onChange={(e) => setSelectedWeek(e.target.value)}
-              className="w-full min-w-[14rem] rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-800 shadow-sm focus:border-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/20 sm:w-auto"
-            >
-              <option value="live">
-                This week (live) — {formatWeekLabel(currentWeekId)}
-              </option>
-              {pastWeeks.map((s) => (
-                <option key={s.weekId} value={s.weekId}>
-                  {s.weekLabel}
+    <div className={analyticsView === "report" ? "space-y-4" : "space-y-6"}>
+      {analyticsView === "overview" ? (
+        <Card>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <SectionTitle>Analytics</SectionTitle>
+              <p className="mt-1 text-sm text-gray-500">
+                Live overview of leads, tickets, jobs, CRM, expenses, project ops,
+                inventory, and team activity. Metrics for the current week are saved
+                automatically so you can review past weeks.
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-col gap-2 sm:items-end">
+              <ViewToggle view={analyticsView} onChange={setView} />
+              <label htmlFor="analytics-week" className="sr-only">
+                Week
+              </label>
+              <select
+                id="analytics-week"
+                value={selectedWeek}
+                onChange={(e) => setSelectedWeek(e.target.value)}
+                className="w-full min-w-[14rem] rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-800 shadow-sm focus:border-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/20 sm:w-auto"
+              >
+                <option value="live">
+                  This week (live) — {formatWeekLabel(currentWeekId)}
                 </option>
-              ))}
-            </select>
+                {pastWeeks.map((s) => (
+                  <option key={s.weekId} value={s.weekId}>
+                    {s.weekLabel}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
+        </Card>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <ViewToggle view={analyticsView} onChange={setView} />
         </div>
-      </Card>
+      )}
 
-      {!viewingLive && historical && (
+      {analyticsView === "overview" && !viewingLive && historical && (
         <div className="rounded-2xl border border-indigo-100 border-l-4 border-l-indigo-500 bg-indigo-50/40 p-6 shadow-sm">
           <p className="text-sm font-semibold text-indigo-900">
             Historical snapshot — {historical.weekLabel}
@@ -2685,7 +3204,7 @@ function AnalyticsTab({
         </div>
       )}
 
-      {!viewingLive && !historical && (
+      {analyticsView === "overview" && !viewingLive && !historical && (
         <Card>
           <p className="text-sm text-gray-500">
             No saved data for that week yet.
@@ -2697,6 +3216,16 @@ function AnalyticsTab({
         <Card>
           <p className="text-sm text-gray-500">Loading analytics…</p>
         </Card>
+      ) : analyticsView === "report" ? (
+        <AnalyticsReport
+          expenses={expenses}
+          jobs={jobs}
+          crmLeads={crmLeads}
+          changeOrders={changeOrders}
+          homepageLeads={leads}
+          tickets={tickets}
+          snapshots={snapshots}
+        />
       ) : normalizedMetrics ? (
         <AnalyticsDashboard
           metrics={normalizedMetrics}

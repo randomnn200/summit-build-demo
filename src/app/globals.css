@@ -45,6 +45,47 @@ body {
     @apply w-full rounded-md border border-gray-200 px-3 py-2 text-sm outline-none transition focus:border-gray-900;
   }
 
+  .date-input {
+    @apply min-h-[2.625rem] tabular-nums;
+    color-scheme: light;
+  }
+
+  .date-input::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.55;
+    padding: 0.125rem;
+  }
+
+  .date-input::-webkit-calendar-picker-indicator:hover {
+    opacity: 0.9;
+  }
+
+  .date-input::-webkit-datetime-edit {
+    padding: 0;
+  }
+
+  .date-input::-webkit-datetime-edit-fields-wrapper {
+    padding: 0;
+  }
+
+  .time-input {
+    @apply min-h-[2.625rem] tabular-nums;
+    color-scheme: light;
+  }
+
+  .time-input::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.55;
+  }
+
+  .time-input::-webkit-calendar-picker-indicator:hover {
+    opacity: 0.9;
+  }
+
+  .money-input {
+    @apply min-h-[2.625rem] tabular-nums;
+  }
+
   .brand-bar {
     @apply h-1 w-full bg-brand-primary;
   }

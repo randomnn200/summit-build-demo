@@ -16,6 +16,7 @@ import {
   type ScheduleItem,
   type TimeOffRequest,
 } from "../lib/firebase/firebaseUtils";
+import DateInput from "./DateInput";
 
 const GREEN = "var(--brand-primary)";
 const RED = "var(--brand-accent)";
@@ -375,21 +376,19 @@ export default function ScheduleTab({
             <SectionTitle>Request time off</SectionTitle>
             <form onSubmit={onTimeOffSubmit} className="mt-4 space-y-3">
               <div className="grid grid-cols-2 gap-3">
-                <input
-                  type="date"
+                <DateInput
+                  label="Start date"
                   value={timeOffForm.startDate}
-                  onChange={(e) =>
-                    setTimeOffForm((f) => ({ ...f, startDate: e.target.value }))
+                  onChange={(startDate) =>
+                    setTimeOffForm((f) => ({ ...f, startDate }))
                   }
-                  className="profile-input"
                 />
-                <input
-                  type="date"
+                <DateInput
+                  label="End date"
                   value={timeOffForm.endDate}
-                  onChange={(e) =>
-                    setTimeOffForm((f) => ({ ...f, endDate: e.target.value }))
+                  onChange={(endDate) =>
+                    setTimeOffForm((f) => ({ ...f, endDate }))
                   }
-                  className="profile-input"
                 />
               </div>
               <textarea
@@ -491,18 +490,21 @@ export default function ScheduleTab({
                   className="profile-input"
                 />
                 <div className="grid grid-cols-2 gap-3">
-                  <input
-                    type="date"
+                  <DateInput
+                    label="Date"
                     value={form.date}
-                    onChange={(e) => set("date", e.target.value)}
-                    className="profile-input"
+                    onChange={(date) => set("date", date)}
+                    required
                   />
-                  <input
-                    type="time"
-                    value={form.time}
-                    onChange={(e) => set("time", e.target.value)}
-                    className="profile-input"
-                  />
+                  <label className="block">
+                    <span className="text-sm font-medium text-gray-700">Time</span>
+                    <input
+                      type="time"
+                      value={form.time}
+                      onChange={(e) => set("time", e.target.value)}
+                      className="profile-input time-input mt-1"
+                    />
+                  </label>
                 </div>
                 <input
                   value={form.location}

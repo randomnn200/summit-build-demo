@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Plus, Search, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Filter, Plus, Search, Trash2, X } from "lucide-react";
 import {
   EXPENSE_CATEGORIES,
   EXPENSE_CATEGORY_ICONS,
@@ -11,6 +11,7 @@ import {
   isThisMonth,
   type ExpenseCategory,
 } from "../lib/expenses";
+import { todayIso } from "../lib/dates";
 import {
   addExpense,
   deleteExpense,
@@ -18,16 +19,16 @@ import {
   type Expense,
   type Role,
 } from "../lib/firebase/firebaseUtils";
+import DateInput from "./DateInput";
+import MoneyInput from "./MoneyInput";
+import { parseMoneyInput } from "../lib/formatMoneyInput";
+import { SearchableSelect } from "./ops/opsShared";
 
 const GREEN = "var(--brand-primary)";
 const RED = "var(--brand-accent)";
 
 function fmtMoney(n: number) {
   return n.toLocaleString(undefined, { style: "currency", currency: "USD" });
-}
-
-function todayIso() {
-  return new Date().toISOString().slice(0, 10);
 }
 
 const emptyForm = {
@@ -37,6 +38,24 @@ const emptyForm = {
   description: "",
   jobOrProject: "",
   notes: "",
+};
+
+type ExpenseFilters = {
+  category: string;
+  minAmount: string;
+  maxAmount: string;
+  dateFrom: string;
+  dateTo: string;
+  submittedBy: string;
+};
+
+const defaultFilters: ExpenseFilters = {
+  category: "all",
+  minAmount: "",
+  maxAmount: "",
+  dateFrom: "",
+  dateTo: "",
+  submittedBy: "all",
 };
 
 export default function ExpensesTab({
@@ -54,10 +73,9 @@ export default function ExpensesTab({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
-  const [filterCategory, setFilterCategory] = useState<string>("all");
-  const [filterMonth, setFilterMonth] = useState<"all" | "this-month">(
-    "this-month"
-  );
+  const [filters, setFilters] = useState<ExpenseFilters>(defaultFilters);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filtersRef = useRef<HTMLDivElement>(null);
   const [pendingDelete, setPendingDelete] = useState<Expense | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -69,16 +87,62 @@ export default function ExpensesTab({
     return unsub;
   }, []);
 
+  useEffect(() => {
+    if (!filtersOpen) return;
+    const onClickOutside = (e: MouseEvent) => {
+      if (filtersRef.current && !filtersRef.current.contains(e.target as Node)) {
+        setFiltersOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [filtersOpen]);
+
+  const submitters = useMemo(() => {
+    const names = new Set<string>();
+    for (const e of expenses) {
+      if (e.submittedBy?.trim()) names.add(e.submittedBy.trim());
+    }
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [expenses]);
+
+  const setFilter = <K extends keyof ExpenseFilters>(key: K, value: ExpenseFilters[K]) =>
+    setFilters((f) => ({ ...f, [key]: value }));
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (filters.category !== "all") count++;
+    if (filters.minAmount || filters.maxAmount) count++;
+    if (filters.dateFrom || filters.dateTo) count++;
+    if (filters.submittedBy !== "all") count++;
+    return count;
+  }, [filters]);
+
+  const clearFilters = () => setFilters(defaultFilters);
+
   const set = (k: keyof typeof form, v: string) =>
     setForm((f) => ({ ...f, [k]: v }));
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const minAmount = filters.minAmount ? parseMoneyInput(filters.minAmount) : null;
+    const maxAmount = filters.maxAmount ? parseMoneyInput(filters.maxAmount) : null;
+
     return expenses.filter((e) => {
-      if (filterCategory !== "all" && e.category !== filterCategory) {
+      if (filters.category !== "all" && e.category !== filters.category) {
         return false;
       }
-      if (filterMonth === "this-month" && !isThisMonth(e.date)) return false;
+      if (minAmount !== null && !Number.isNaN(minAmount) && e.amount < minAmount) {
+        return false;
+      }
+      if (maxAmount !== null && !Number.isNaN(maxAmount) && e.amount > maxAmount) {
+        return false;
+      }
+      if (filters.dateFrom && e.date < filters.dateFrom) return false;
+      if (filters.dateTo && e.date > filters.dateTo) return false;
+      if (filters.submittedBy !== "all" && e.submittedBy !== filters.submittedBy) {
+        return false;
+      }
       if (!q) return true;
       return (
         expenseDescription(e).toLowerCase().includes(q) ||
@@ -88,7 +152,7 @@ export default function ExpensesTab({
         e.submittedBy.toLowerCase().includes(q)
       );
     });
-  }, [expenses, search, filterCategory, filterMonth]);
+  }, [expenses, search, filters]);
 
   const monthTotal = useMemo(
     () =>
@@ -111,7 +175,7 @@ export default function ExpensesTab({
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    const amount = Number(form.amount);
+    const amount = parseMoneyInput(form.amount);
     if (!amount || amount <= 0) {
       setError("Enter a valid amount.");
       return;
@@ -265,26 +329,27 @@ export default function ExpensesTab({
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
                 <span className="text-sm font-medium text-gray-700">Amount</span>
-                <input
-                  type="number"
-                  min={0.01}
-                  step="0.01"
-                  value={form.amount}
-                  onChange={(e) => set("amount", e.target.value)}
-                  placeholder="0.00"
-                  className="profile-input mt-1.5"
-                  required
-                />
+                <div className="mt-1.5">
+                  <MoneyInput
+                    hideLabel
+                    value={form.amount}
+                    onChange={(amount) => set("amount", amount)}
+                    className="profile-input money-input"
+                    required
+                  />
+                </div>
               </label>
               <label className="block">
                 <span className="text-sm font-medium text-gray-700">Date</span>
-                <input
-                  type="date"
-                  value={form.date}
-                  onChange={(e) => set("date", e.target.value)}
-                  className="profile-input mt-1.5"
-                  required
-                />
+                <div className="mt-1.5">
+                  <DateInput
+                    hideLabel
+                    value={form.date}
+                    onChange={(date) => set("date", date)}
+                    className="profile-input date-input"
+                    required
+                  />
+                </div>
               </label>
             </div>
             <label className="block">
@@ -338,7 +403,7 @@ export default function ExpensesTab({
             </span>
           </div>
 
-          <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <input
@@ -348,28 +413,144 @@ export default function ExpensesTab({
                 className="profile-input pl-9"
               />
             </div>
-            <select
-              value={filterCategory}
-              onChange={(e) => setFilterCategory(e.target.value)}
-              className="profile-input sm:w-44"
-            >
-              <option value="all">All categories</option>
-              {EXPENSE_CATEGORIES.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
-            <select
-              value={filterMonth}
-              onChange={(e) =>
-                setFilterMonth(e.target.value as "all" | "this-month")
-              }
-              className="profile-input sm:w-36"
-            >
-              <option value="this-month">This month</option>
-              <option value="all">All time</option>
-            </select>
+            <div ref={filtersRef} className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setFiltersOpen((o) => !o)}
+                className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-semibold transition ${
+                  activeFilterCount > 0
+                    ? "border-brand-primary bg-brand-primary/5 text-brand-primary"
+                    : "border-gray-200 text-gray-700 hover:bg-gray-50"
+                }`}
+              >
+                <Filter className="h-4 w-4" />
+                Filters
+                {activeFilterCount > 0 && (
+                  <span className="rounded-full bg-brand-primary px-1.5 py-0.5 text-[10px] font-bold text-white">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
+              {filtersOpen && (
+                <div className="absolute right-0 z-50 mt-2 w-[min(100vw-2rem,22rem)] rounded-xl border border-gray-200 bg-white p-4 shadow-xl sm:w-80">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-sm font-bold text-gray-900">Filter expenses</h3>
+                    <button
+                      type="button"
+                      onClick={() => setFiltersOpen(false)}
+                      className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                      aria-label="Close filters"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="mt-4 space-y-3">
+                    <label className="block">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                        Category
+                      </span>
+                      <div className="mt-1">
+                        <SearchableSelect
+                          options={[
+                            { value: "all", label: "All categories" },
+                            ...EXPENSE_CATEGORIES.map((cat) => ({
+                              value: cat,
+                              label: `${EXPENSE_CATEGORY_ICONS[cat]} ${cat}`,
+                              searchText: cat,
+                            })),
+                          ]}
+                          value={filters.category}
+                          onChange={(v) => setFilter("category", v)}
+                          placeholder="All categories"
+                          searchPlaceholder="Search categories…"
+                        />
+                      </div>
+                    </label>
+                    <div>
+                      <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                        Price range
+                      </span>
+                      <div className="mt-1 grid grid-cols-2 gap-2">
+                        <MoneyInput
+                          hideLabel
+                          value={filters.minAmount}
+                          onChange={(v) => setFilter("minAmount", v)}
+                          placeholder="Min $"
+                          className="profile-input money-input"
+                        />
+                        <MoneyInput
+                          hideLabel
+                          value={filters.maxAmount}
+                          onChange={(v) => setFilter("maxAmount", v)}
+                          placeholder="Max $"
+                          className="profile-input money-input"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                        Date range
+                      </span>
+                      <div className="mt-1 grid grid-cols-2 gap-2">
+                        <DateInput
+                          hideLabel
+                          value={filters.dateFrom}
+                          onChange={(v) => setFilter("dateFrom", v)}
+                          aria-label="From date"
+                        />
+                        <DateInput
+                          hideLabel
+                          value={filters.dateTo}
+                          onChange={(v) => setFilter("dateTo", v)}
+                          aria-label="To date"
+                        />
+                      </div>
+                      <p className="mt-1 text-[11px] text-gray-400">
+                        Use one date for a single day, or both for a range.
+                      </p>
+                    </div>
+                    <label className="block">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                        Logged by
+                      </span>
+                      <div className="mt-1">
+                        <SearchableSelect
+                          options={[
+                            { value: "all", label: "Everyone" },
+                            ...submitters.map((name) => ({
+                              value: name,
+                              label: name,
+                            })),
+                          ]}
+                          value={filters.submittedBy}
+                          onChange={(v) => setFilter("submittedBy", v)}
+                          placeholder="Everyone"
+                          searchPlaceholder="Search by name…"
+                        />
+                      </div>
+                    </label>
+                  </div>
+                  <div className="mt-4 flex items-center justify-between gap-2 border-t border-gray-100 pt-3">
+                    <button
+                      type="button"
+                      onClick={clearFilters}
+                      disabled={activeFilterCount === 0}
+                      className="text-xs font-semibold text-gray-500 hover:text-gray-700 disabled:opacity-40"
+                    >
+                      Clear all
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFiltersOpen(false)}
+                      className="rounded-md px-3 py-1.5 text-xs font-semibold text-white"
+                      style={{ backgroundColor: GREEN }}
+                    >
+                      Done
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {loading ? (

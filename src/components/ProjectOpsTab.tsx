@@ -1,0 +1,140 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import {
+  DollarSign,
+  FileStack,
+  FileText,
+  HardHat,
+  Wrench,
+} from "lucide-react";
+import { subscribeToJobs, type Job } from "../lib/firebase/firebaseUtils";
+import ChangeOrdersPanel from "./ops/ChangeOrdersPanel";
+import ProjectDocumentsPanel from "./ops/ProjectDocumentsPanel";
+import JobCostsPanel from "./ops/JobCostsPanel";
+import SubcontractorsPanel from "./ops/SubcontractorsPanel";
+import ToolCheckoutPanel from "./ops/ToolCheckoutPanel";
+
+type OpsSection =
+  | "change_orders"
+  | "documents"
+  | "job_costs"
+  | "subcontractors"
+  | "tool_checkout";
+
+const SECTIONS: {
+  id: OpsSection;
+  label: string;
+  icon: React.ReactNode;
+  blurb: string;
+}[] = [
+  {
+    id: "change_orders",
+    label: "Change orders",
+    icon: <FileText className="h-4 w-4" />,
+    blurb: "Document extra work, track approval, invoice status, and PDFs.",
+  },
+  {
+    id: "documents",
+    label: "Documents",
+    icon: <FileStack className="h-4 w-4" />,
+    blurb: "Drawings, permits, contracts, RFIs — one place per job.",
+  },
+  {
+    id: "job_costs",
+    label: "Job costs",
+    icon: <DollarSign className="h-4 w-4" />,
+    blurb: "Budget vs. actual, profit, and project health.",
+  },
+  {
+    id: "subcontractors",
+    label: "Subcontractors",
+    icon: <HardHat className="h-4 w-4" />,
+    blurb: "Insurance, licenses, assignments, and compliance reminders.",
+  },
+  {
+    id: "tool_checkout",
+    label: "Tool checkout",
+    icon: <Wrench className="h-4 w-4" />,
+    blurb: "Who has what tool, due dates, returns, and maintenance.",
+  },
+];
+
+export default function ProjectOpsTab({
+  userName,
+  userEmail,
+  companyName,
+}: {
+  userName: string | null;
+  userEmail: string | null;
+  companyName: string;
+}) {
+  const [section, setSection] = useState<OpsSection>("change_orders");
+  const [jobs, setJobs] = useState<Job[]>([]);
+
+  useEffect(() => subscribeToJobs(setJobs), []);
+
+  const meta = SECTIONS.find((s) => s.id === section)!;
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+        <h2 className="text-lg font-black text-gray-900">Project operations</h2>
+        <p className="mt-1 text-sm text-gray-500">
+          Change orders, documents, job costing, subs, and tool accountability —
+          built for how construction companies actually lose money and time.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {SECTIONS.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => setSection(s.id)}
+            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition"
+            style={
+              section === s.id
+                ? { backgroundColor: "var(--brand-primary)", color: "white" }
+                : { backgroundColor: "white", color: "#374151" }
+            }
+          >
+            {s.icon}
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      <p className="text-sm text-gray-500">{meta.blurb}</p>
+
+      {section === "change_orders" && (
+        <ChangeOrdersPanel
+          jobs={jobs}
+          userName={userName}
+          userEmail={userEmail}
+          companyName={companyName}
+        />
+      )}
+      {section === "documents" && (
+        <ProjectDocumentsPanel jobs={jobs} userName={userName} />
+      )}
+      {section === "job_costs" && (
+        <JobCostsPanel
+          jobs={jobs}
+          userName={userName}
+          userEmail={userEmail}
+        />
+      )}
+      {section === "subcontractors" && (
+        <SubcontractorsPanel jobs={jobs} userName={userName} />
+      )}
+      {section === "tool_checkout" && (
+        <ToolCheckoutPanel
+          jobs={jobs}
+          userName={userName}
+          userEmail={userEmail}
+        />
+      )}
+    </div>
+  );
+}

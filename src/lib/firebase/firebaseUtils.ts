@@ -511,6 +511,15 @@ export const getCallNotes = async (): Promise<CallNote[]> => {
   return sortByCreatedDesc(notes);
 };
 
+export const subscribeToCallNotes = (onChange: (notes: CallNote[]) => void) =>
+  onSnapshot(collection(db, "callNotes"), (snapshot) => {
+    const notes = snapshot.docs.map((d) => ({
+      id: d.id,
+      ...(d.data() as Omit<CallNote, "id">),
+    }));
+    onChange(sortByCreatedDesc(notes));
+  });
+
 export const deleteCallNote = (id: string) =>
   deleteDoc(doc(db, "callNotes", id));
 

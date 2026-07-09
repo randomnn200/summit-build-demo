@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Briefcase, LogOut, ShieldCheck } from "lucide-react";
 import { useAuth } from "../lib/hooks/useAuth";
 import { formatPhone } from "../lib/formatPhone";
+import PhoneInput from "./PhoneInput";
 import { companyInitials } from "../lib/theme";
 import {
   emptyProfile,
@@ -85,7 +86,7 @@ export default function ProfileMenu() {
         displayName: existing?.displayName || user.displayName || "",
         city: existing?.city || "",
         title: existing?.title || "",
-        phone: existing?.phone || "",
+        phone: existing?.phone ? formatPhone(existing.phone) : "",
         contactEmail: existing?.contactEmail || user.email || "",
         bio: existing?.bio || "",
       });
@@ -281,12 +282,9 @@ export default function ProfileMenu() {
                 />
               </Field>
               <Field label="Phone">
-                <input
-                  type="tel"
+                <PhoneInput
                   value={profile.phone}
-                  onChange={(e) => setField("phone", formatPhone(e.target.value))}
-                  placeholder="(555) 555-5555"
-                  className="profile-input"
+                  onChange={(v) => setField("phone", v)}
                 />
               </Field>
               <Field label="Contact email">

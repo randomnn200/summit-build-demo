@@ -18,6 +18,9 @@ import {
   type PurchaseOrder,
   type PurchaseOrderLine,
 } from "../lib/firebase/firebaseUtils";
+import DateInput from "./DateInput";
+import MoneyInput from "./MoneyInput";
+import { moneyInputFromNumber, parseMoneyInput } from "../lib/formatMoneyInput";
 
 const GREEN = "var(--brand-primary)";
 
@@ -254,7 +257,7 @@ export default function PurchaseOrdersPanel({
     const item = items.find((x) => x.id === itemId);
     updateLine(i, {
       itemId,
-      unitCost: item?.unitCost != null ? String(item.unitCost) : "",
+      unitCost: item?.unitCost != null ? moneyInputFromNumber(item.unitCost) : "",
     });
   };
 
@@ -262,7 +265,7 @@ export default function PurchaseOrdersPanel({
     const item = items.find((x) => x.id === line.itemId);
     const qty = Number(line.quantityOrdered) || 0;
     const cost =
-      Number(line.unitCost) || (item?.unitCost != null ? item.unitCost : 0);
+      parseMoneyInput(line.unitCost) || (item?.unitCost != null ? item.unitCost : 0);
     return sum + qty * cost;
   }, 0);
 
@@ -289,7 +292,7 @@ export default function PurchaseOrdersPanel({
       if (!item) continue;
       const qty = Number(line.quantityOrdered);
       if (!qty || qty <= 0) continue;
-      const cost = Number(line.unitCost) || item.unitCost || 0;
+      const cost = parseMoneyInput(line.unitCost) || item.unitCost || 0;
       poLines.push({
         itemId: item.id,
         itemName: item.name,
@@ -354,11 +357,10 @@ export default function PurchaseOrdersPanel({
                 className="profile-input"
                 required
               />
-              <input
-                type="date"
+              <DateInput
+                label="Expected delivery"
                 value={expectedDate}
-                onChange={(e) => setExpectedDate(e.target.value)}
-                className="profile-input"
+                onChange={setExpectedDate}
               />
             </div>
             <select
@@ -403,16 +405,12 @@ export default function PurchaseOrdersPanel({
                     placeholder="Qty"
                     className="profile-input"
                   />
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
+                  <MoneyInput
+                    hideLabel
                     value={line.unitCost}
-                    onChange={(e) =>
-                      updateLine(i, { unitCost: e.target.value })
-                    }
+                    onChange={(unitCost) => updateLine(i, { unitCost })}
                     placeholder="Unit $"
-                    className="profile-input"
+                    className="profile-input money-input"
                   />
                   {lines.length > 1 && (
                     <button

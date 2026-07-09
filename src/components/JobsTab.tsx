@@ -16,6 +16,7 @@ import {
   type Role,
   type ScheduleItem,
 } from "../lib/firebase/firebaseUtils";
+import { SearchableSelect } from "./ops/opsShared";
 
 const GREEN = "var(--brand-primary)";
 const RED = "var(--brand-accent)";
@@ -228,20 +229,23 @@ export default function JobsTab({
             <form onSubmit={onCreate} className="mt-4 space-y-3">
               <label className="block">
                 <span className="text-sm font-medium text-gray-700">Client</span>
-                <select
-                  value={form.clientUid}
-                  onChange={(e) => onClientChange(e.target.value)}
-                  className="profile-input mt-1"
-                >
-                  <option value="">— Select client —</option>
-                  {clients.map((c) => (
-                    <option key={c.uid} value={c.uid}>
-                      {c.name}
-                      {c.email ? ` (${c.email})` : ""}
-                    </option>
-                  ))}
-                  <option value="__manual__">No client / TBD</option>
-                </select>
+                <div className="mt-1">
+                  <SearchableSelect
+                    options={[
+                      ...clients.map((c) => ({
+                        value: c.uid,
+                        label: c.name,
+                        meta: c.email || undefined,
+                        searchText: `${c.name} ${c.email ?? ""}`,
+                      })),
+                      { value: "__manual__", label: "No client / TBD" },
+                    ]}
+                    value={form.clientUid}
+                    onChange={onClientChange}
+                    placeholder="— Select client —"
+                    searchPlaceholder="Search by name or email…"
+                  />
+                </div>
               </label>
               <input
                 value={form.title}
@@ -255,17 +259,15 @@ export default function JobsTab({
                 placeholder="Postal code (e.g. 90210)"
                 className="profile-input"
               />
-              <select
+              <SearchableSelect
+                options={JOB_STATUSES.map((s) => ({
+                  value: s,
+                  label: JOB_STATUS_LABELS[s],
+                }))}
                 value={form.status}
-                onChange={(e) => set("status", e.target.value)}
-                className="profile-input"
-              >
-                {JOB_STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {JOB_STATUS_LABELS[s]}
-                  </option>
-                ))}
-              </select>
+                onChange={(status) => set("status", status)}
+                searchPlaceholder="Search status…"
+              />
               <textarea
                 value={form.notes}
                 onChange={(e) => set("notes", e.target.value)}

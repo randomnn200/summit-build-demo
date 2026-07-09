@@ -1,3 +1,5 @@
+import { moneyInputFromNumber, parseMoneyInput } from "./formatMoneyInput";
+
 export const QUOTE_PROJECT_TYPES = [
   "Kitchen Remodel",
   "Bathroom Remodel",
@@ -324,6 +326,10 @@ export function parseQuoteForm(form: Record<string, string>): QuoteEstimatorInpu
     const v = Number(form[key]);
     return Number.isFinite(v) ? v : fallback;
   };
+  const money = (key: string, fallback = 0) => {
+    const v = parseMoneyInput(form[key] ?? "");
+    return Number.isFinite(v) ? v : fallback;
+  };
 
   return {
     customerName: form.customerName.trim(),
@@ -333,16 +339,16 @@ export function parseQuoteForm(form: Record<string, string>): QuoteEstimatorInpu
     crewSize: Math.max(1, num("crewSize", 2)),
     daysOnSite: Math.max(0.5, num("daysOnSite", 5)),
     hoursPerDay: Math.max(1, Math.min(12, num("hoursPerDay", 8))),
-    loadedLaborRate: Math.max(1, num("loadedLaborRate", 52)),
-    materialsCost: Math.max(0, num("materialsCost", 0)),
+    loadedLaborRate: Math.max(1, money("loadedLaborRate", 52)),
+    materialsCost: Math.max(0, money("materialsCost", 0)),
     materialsMarkupPercent: Math.max(0, num("materialsMarkupPercent", 18)),
-    subcontractorCost: Math.max(0, num("subcontractorCost", 0)),
+    subcontractorCost: Math.max(0, money("subcontractorCost", 0)),
     subcontractorMarkupPercent: Math.max(0, num("subcontractorMarkupPercent", 12)),
-    permitFees: Math.max(0, num("permitFees", 0)),
-    equipmentRental: Math.max(0, num("equipmentRental", 0)),
+    permitFees: Math.max(0, money("permitFees", 0)),
+    equipmentRental: Math.max(0, money("equipmentRental", 0)),
     travelMiles: Math.max(0, num("travelMiles", 0)),
-    travelRatePerMile: Math.max(0, num("travelRatePerMile", 0.7)),
-    dumpsterDisposal: Math.max(0, num("dumpsterDisposal", 0)),
+    travelRatePerMile: Math.max(0, money("travelRatePerMile", 0.7)),
+    dumpsterDisposal: Math.max(0, money("dumpsterDisposal", 0)),
     overheadPercent: Math.max(0, num("overheadPercent", 12)),
     contingencyPercent: Math.max(0, num("contingencyPercent", 10)),
     profitPercent: Math.max(0, num("profitPercent", 15)),
@@ -360,16 +366,16 @@ export function emptyQuoteForm(): Record<string, string> {
     crewSize: String(d.crewSize),
     daysOnSite: String(d.daysOnSite),
     hoursPerDay: String(d.hoursPerDay),
-    loadedLaborRate: String(d.loadedLaborRate),
-    materialsCost: String(d.materialsCost),
+    loadedLaborRate: moneyInputFromNumber(d.loadedLaborRate),
+    materialsCost: moneyInputFromNumber(d.materialsCost),
     materialsMarkupPercent: String(d.materialsMarkupPercent),
-    subcontractorCost: String(d.subcontractorCost),
+    subcontractorCost: moneyInputFromNumber(d.subcontractorCost),
     subcontractorMarkupPercent: String(d.subcontractorMarkupPercent),
-    permitFees: String(d.permitFees),
-    equipmentRental: String(d.equipmentRental),
+    permitFees: moneyInputFromNumber(d.permitFees),
+    equipmentRental: moneyInputFromNumber(d.equipmentRental),
     travelMiles: String(d.travelMiles),
-    travelRatePerMile: String(d.travelRatePerMile),
-    dumpsterDisposal: String(d.dumpsterDisposal),
+    travelRatePerMile: moneyInputFromNumber(d.travelRatePerMile),
+    dumpsterDisposal: moneyInputFromNumber(d.dumpsterDisposal),
     overheadPercent: String(d.overheadPercent),
     contingencyPercent: String(d.contingencyPercent),
     profitPercent: String(d.profitPercent),

@@ -26,6 +26,8 @@ import {
   type InventoryCategory,
   type InventoryUnit,
 } from "../lib/inventory";
+import { moneyInputFromNumber, parseMoneyInput } from "../lib/formatMoneyInput";
+import MoneyInput from "./MoneyInput";
 import {
   addInventoryItem,
   deleteInventoryItem,
@@ -93,14 +95,14 @@ function itemToForm(item: InventoryItem): ItemFormState {
     unit: item.unit,
     location: item.location,
     reorderLevel: String(item.reorderLevel),
-    unitCost: item.unitCost != null ? String(item.unitCost) : "",
+    unitCost: item.unitCost != null ? moneyInputFromNumber(item.unitCost) : "",
     supplier: item.supplier ?? "",
     notes: item.notes ?? "",
   };
 }
 
 function parseItemForm(form: ItemFormState, includeQuantity: boolean): InventoryItemInput {
-  const parsedCost = form.unitCost ? Number(form.unitCost) : NaN;
+  const parsedCost = form.unitCost ? parseMoneyInput(form.unitCost) : NaN;
   return {
     name: form.name.trim(),
     sku: form.sku.trim(),
@@ -169,7 +171,7 @@ function ItemFormFields({
     setForm((f) => ({ ...f, [k]: v }));
 
   const qty = Math.max(0, Number(form.quantity) || 0);
-  const unitCost = form.unitCost ? Number(form.unitCost) : 0;
+  const unitCost = form.unitCost ? parseMoneyInput(form.unitCost) : 0;
   const totalStockValue =
     showQuantity && unitCost > 0 ? qty * unitCost : null;
 
@@ -244,14 +246,12 @@ function ItemFormFields({
           placeholder="Reorder at (min stock)"
           className="profile-input"
         />
-        <input
-          type="number"
-          min={0}
-          step="0.01"
+        <MoneyInput
+          hideLabel
           value={form.unitCost}
-          onChange={(e) => set("unitCost", e.target.value)}
+          onChange={(unitCost) => set("unitCost", unitCost)}
           placeholder="Unit cost ($)"
-          className="profile-input"
+          className="profile-input money-input"
         />
       </div>
       {totalStockValue != null && (

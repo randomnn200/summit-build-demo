@@ -19,6 +19,8 @@ import {
   type LaborTierId,
   type QuoteProjectType,
 } from "../lib/quoteEstimator";
+import { moneyInputFromNumber, normalizeMoneyFormFields } from "../lib/formatMoneyInput";
+import MoneyInput from "./MoneyInput";
 import {
   addSavedQuote,
   deleteSavedQuote,
@@ -134,19 +136,19 @@ export default function QuoteHelperTab({
         ? { daysOnSite: String(defaults.daysOnSite) }
         : {}),
       ...(defaults.materialsCost != null
-        ? { materialsCost: String(defaults.materialsCost) }
+        ? { materialsCost: moneyInputFromNumber(defaults.materialsCost) }
         : {}),
       ...(defaults.permitFees != null
-        ? { permitFees: String(defaults.permitFees) }
+        ? { permitFees: moneyInputFromNumber(defaults.permitFees) }
         : {}),
       ...(defaults.dumpsterDisposal != null
-        ? { dumpsterDisposal: String(defaults.dumpsterDisposal) }
+        ? { dumpsterDisposal: moneyInputFromNumber(defaults.dumpsterDisposal) }
         : {}),
       ...(defaults.subcontractorCost != null
-        ? { subcontractorCost: String(defaults.subcontractorCost) }
+        ? { subcontractorCost: moneyInputFromNumber(defaults.subcontractorCost) }
         : {}),
       ...(defaults.equipmentRental != null
-        ? { equipmentRental: String(defaults.equipmentRental) }
+        ? { equipmentRental: moneyInputFromNumber(defaults.equipmentRental) }
         : {}),
     }));
   };
@@ -157,7 +159,9 @@ export default function QuoteHelperTab({
       ...f,
       laborTier: tierId,
       loadedLaborRate:
-        tierId === "custom" ? f.loadedLaborRate : String(tier?.rate ?? 52),
+        tierId === "custom"
+          ? f.loadedLaborRate
+          : moneyInputFromNumber(tier?.rate ?? 52),
     }));
   };
 
@@ -181,7 +185,7 @@ export default function QuoteHelperTab({
   };
 
   const loadQuote = (quote: SavedQuote) => {
-    setForm({ ...emptyQuoteForm(), ...quote.form });
+    setForm(normalizeMoneyFormFields({ ...emptyQuoteForm(), ...quote.form }));
     setClientUid(quote.clientUid ?? "__manual__");
     setSaveOk(false);
     setSaveError("");
@@ -481,17 +485,15 @@ export default function QuoteHelperTab({
                 />
               </Field>
               <Field label="Loaded $/hr">
-                <input
-                  type="number"
-                  min={1}
-                  step={1}
+                <MoneyInput
+                  hideLabel
                   value={form.loadedLaborRate}
-                  onChange={(e) => {
-                    set("loadedLaborRate", e.target.value);
+                  onChange={(loadedLaborRate) => {
+                    set("loadedLaborRate", loadedLaborRate);
                     set("laborTier", "custom");
                   }}
                   disabled={form.laborTier !== "custom"}
-                  className="profile-input disabled:bg-gray-100"
+                  className="profile-input money-input disabled:bg-gray-100"
                 />
               </Field>
             </div>
@@ -504,13 +506,11 @@ export default function QuoteHelperTab({
           <Section title="Materials, subs & job costs">
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Materials cost (your estimate)">
-                <input
-                  type="number"
-                  min={0}
-                  step={50}
+                <MoneyInput
+                  hideLabel
                   value={form.materialsCost}
-                  onChange={(e) => set("materialsCost", e.target.value)}
-                  className="profile-input"
+                  onChange={(materialsCost) => set("materialsCost", materialsCost)}
+                  className="profile-input money-input"
                 />
               </Field>
               <Field label="Materials markup %" hint="Typical 15–25%">
@@ -525,12 +525,11 @@ export default function QuoteHelperTab({
                 />
               </Field>
               <Field label="Subcontractor quotes">
-                <input
-                  type="number"
-                  min={0}
+                <MoneyInput
+                  hideLabel
                   value={form.subcontractorCost}
-                  onChange={(e) => set("subcontractorCost", e.target.value)}
-                  className="profile-input"
+                  onChange={(subcontractorCost) => set("subcontractorCost", subcontractorCost)}
+                  className="profile-input money-input"
                 />
               </Field>
               <Field label="Sub markup %" hint="Typical 10–15%">
@@ -545,21 +544,19 @@ export default function QuoteHelperTab({
                 />
               </Field>
               <Field label="Permits & fees">
-                <input
-                  type="number"
-                  min={0}
+                <MoneyInput
+                  hideLabel
                   value={form.permitFees}
-                  onChange={(e) => set("permitFees", e.target.value)}
-                  className="profile-input"
+                  onChange={(permitFees) => set("permitFees", permitFees)}
+                  className="profile-input money-input"
                 />
               </Field>
               <Field label="Equipment rental">
-                <input
-                  type="number"
-                  min={0}
+                <MoneyInput
+                  hideLabel
                   value={form.equipmentRental}
-                  onChange={(e) => set("equipmentRental", e.target.value)}
-                  className="profile-input"
+                  onChange={(equipmentRental) => set("equipmentRental", equipmentRental)}
+                  className="profile-input money-input"
                 />
               </Field>
               <Field label="Travel miles">
@@ -572,22 +569,21 @@ export default function QuoteHelperTab({
                 />
               </Field>
               <Field label="$/mile">
-                <input
-                  type="number"
-                  min={0}
-                  step={0.05}
+                <MoneyInput
+                  hideLabel
                   value={form.travelRatePerMile}
-                  onChange={(e) => set("travelRatePerMile", e.target.value)}
-                  className="profile-input"
+                  onChange={(travelRatePerMile) =>
+                    set("travelRatePerMile", travelRatePerMile)
+                  }
+                  className="profile-input money-input"
                 />
               </Field>
               <Field label="Dumpster / disposal">
-                <input
-                  type="number"
-                  min={0}
+                <MoneyInput
+                  hideLabel
                   value={form.dumpsterDisposal}
-                  onChange={(e) => set("dumpsterDisposal", e.target.value)}
-                  className="profile-input"
+                  onChange={(dumpsterDisposal) => set("dumpsterDisposal", dumpsterDisposal)}
+                  className="profile-input money-input"
                 />
               </Field>
             </div>
