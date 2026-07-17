@@ -109,3 +109,67 @@ export function jobHealthLabel(budget: number, actual: number) {
   if (ratio <= 1) return "watch";
   return "over";
 }
+
+// —— RFIs ——
+export const RFI_STATUSES = ["open", "pending", "closed"] as const;
+export type RfiStatus = (typeof RFI_STATUSES)[number];
+
+export const RFI_STATUS_LABELS: Record<RfiStatus, string> = {
+  open: "Open",
+  pending: "Pending response",
+  closed: "Closed",
+};
+
+export function generateRfiNumber(jobId: string, existingCount: number) {
+  const seq = String(existingCount + 1).padStart(3, "0");
+  return `RFI-${jobId}-${seq}`;
+}
+
+// —— Daily reports ——
+export const WEATHER_OPTIONS = [
+  "Clear",
+  "Partly cloudy",
+  "Cloudy",
+  "Rain",
+  "Snow",
+  "Windy",
+  "Extreme heat",
+  "Other",
+] as const;
+
+// —— Punch list ——
+export const PUNCH_STATUSES = ["open", "in_progress", "complete"] as const;
+export type PunchStatus = (typeof PUNCH_STATUSES)[number];
+
+export const PUNCH_STATUS_LABELS: Record<PunchStatus, string> = {
+  open: "Open",
+  in_progress: "In progress",
+  complete: "Complete",
+};
+
+// —— Permits & inspections ——
+export const PERMIT_STATUSES = ["pending", "active", "expired", "closed"] as const;
+export type PermitStatus = (typeof PERMIT_STATUSES)[number];
+
+export const PERMIT_STATUS_LABELS: Record<PermitStatus, string> = {
+  pending: "Pending",
+  active: "Active",
+  expired: "Expired",
+  closed: "Closed",
+};
+
+export const INSPECTION_RESULTS = ["scheduled", "passed", "failed", "cancelled"] as const;
+export type InspectionResult = (typeof INSPECTION_RESULTS)[number];
+
+export const INSPECTION_RESULT_LABELS: Record<InspectionResult, string> = {
+  scheduled: "Scheduled",
+  passed: "Passed",
+  failed: "Failed",
+  cancelled: "Cancelled",
+};
+
+export interface OpsActivityEntry {
+  at: number;
+  by: string;
+  action: string;
+}

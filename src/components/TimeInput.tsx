@@ -1,20 +1,20 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { CalendarDays } from "lucide-react";
+import { Clock3 } from "lucide-react";
 import {
-  formatDisplayDate,
-  formatEditDate,
-  parseTypedDate,
+  formatDisplayTime,
+  formatEditTime,
+  parseTypedTime,
 } from "../lib/dates";
 import {
-  formatDateInput,
-  isCompleteDateInput,
-} from "../lib/formatDateInput";
-import DatePickerCalendar from "./picker/DatePickerCalendar";
+  formatTimeInput,
+  isCompleteTimeInput,
+} from "../lib/formatTimeInput";
 import { PickerPopover } from "./picker/PickerPopover";
+import TimePickerPanel from "./picker/TimePickerPanel";
 
-type DateInputProps = Omit<
+type TimeInputProps = Omit<
   React.InputHTMLAttributes<HTMLInputElement>,
   "type" | "value" | "onChange"
 > & {
@@ -25,22 +25,20 @@ type DateInputProps = Omit<
   placeholder?: string;
 };
 
-export default function DateInput({
+export default function TimeInput({
   value,
   onChange,
   label,
   hideLabel = false,
   className = "",
   id,
-  placeholder = "Select date",
+  placeholder = "Select time",
   disabled,
-  min,
-  max,
   required,
   ...props
-}: DateInputProps) {
+}: TimeInputProps) {
   const autoId = useId();
-  const inputId = id ?? (label && !hideLabel ? `date-${autoId}` : undefined);
+  const inputId = id ?? (label && !hideLabel ? `time-${autoId}` : undefined);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -63,21 +61,21 @@ export default function DateInput({
   }, [open]);
 
   const applyFormattedDraft = (raw: string) => {
-    const formatted = formatDateInput(raw);
+    const formatted = formatTimeInput(raw);
     setDraft(formatted);
-    if (isCompleteDateInput(formatted)) {
-      const parsed = parseTypedDate(formatted);
+    if (isCompleteTimeInput(formatted)) {
+      const parsed = parseTypedTime(formatted);
       if (parsed) onChange(parsed);
     }
   };
 
   const commitDraft = () => {
-    const parsed = parseTypedDate(draft);
+    const parsed = parseTypedTime(draft);
     if (parsed === null) {
-      setDraft(value ? formatEditDate(value) : "");
+      setDraft(value ? formatEditTime(value) : "");
     } else {
       onChange(parsed);
-      setDraft(parsed ? formatEditDate(parsed) : "");
+      setDraft(parsed ? formatEditTime(parsed) : "");
     }
     setFocused(false);
   };
@@ -85,7 +83,7 @@ export default function DateInput({
   const displayValue = focused
     ? draft
     : value
-      ? formatDisplayDate(value)
+      ? formatDisplayTime(value)
       : "";
 
   const field = (
@@ -104,7 +102,7 @@ export default function DateInput({
         />
       )}
       <div
-        className={`date-field ${open ? "date-field-open" : ""} ${focused ? "date-field-focused" : ""} ${disabled ? "date-field-disabled" : ""}`.trim()}
+        className={`date-field time-field ${open ? "date-field-open" : ""} ${focused ? "date-field-focused" : ""} ${disabled ? "date-field-disabled" : ""}`.trim()}
       >
         <button
           type="button"
@@ -116,10 +114,10 @@ export default function DateInput({
             inputRef.current?.blur();
           }}
           className="date-field-trigger"
-          aria-label="Open calendar"
+          aria-label="Open time picker"
           aria-expanded={open}
         >
-          <CalendarDays className="h-4 w-4" strokeWidth={1.75} />
+          <Clock3 className="h-4 w-4" strokeWidth={1.75} />
         </button>
         <input
           {...props}
@@ -130,10 +128,10 @@ export default function DateInput({
           autoComplete="off"
           disabled={disabled}
           value={displayValue}
-          placeholder={focused ? "MM/DD/YYYY" : placeholder}
+          placeholder={focused ? "H:MM AM" : placeholder}
           onFocus={() => {
             setFocused(true);
-            setDraft(value ? formatEditDate(value) : "");
+            setDraft(value ? formatEditTime(value) : "");
           }}
           onChange={(e) => applyFormattedDraft(e.target.value)}
           onBlur={() => commitDraft()}
@@ -145,7 +143,7 @@ export default function DateInput({
             }
             if (e.key === "Escape") {
               setOpen(false);
-              setDraft(value ? formatEditDate(value) : "");
+              setDraft(value ? formatEditTime(value) : "");
               setFocused(false);
               inputRef.current?.blur();
             }
@@ -156,13 +154,11 @@ export default function DateInput({
       </div>
 
       <PickerPopover open={open && !disabled}>
-        <DatePickerCalendar
+        <TimePickerPanel
           value={value}
-          min={typeof min === "string" ? min : undefined}
-          max={typeof max === "string" ? max : undefined}
-          onChange={(iso) => {
-            onChange(iso);
-            setDraft(iso ? formatEditDate(iso) : "");
+          onChange={(time) => {
+            onChange(time);
+            setDraft(time ? formatEditTime(time) : "");
           }}
           onClose={() => setOpen(false)}
         />

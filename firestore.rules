@@ -32,7 +32,14 @@ service cloud.firestore {
         'crmEstimates',
         'crmReminders',
         'crmEmailTemplates',
-        'crmProposals'
+        'crmProposals',
+        'rfis',
+        'dailyReports',
+        'punchListItems',
+        'permits',
+        'inspections',
+        'suppliers',
+        'clientMessages'
       ];
     }
 

@@ -54,6 +54,8 @@ export function transactionLabel(type: string) {
 
 export type PurchaseOrderStatus =
   | "draft"
+  | "pending_approval"
+  | "approved"
   | "ordered"
   | "partial"
   | "received"
@@ -63,6 +65,10 @@ export function poStatusLabel(status: PurchaseOrderStatus) {
   switch (status) {
     case "draft":
       return "Draft";
+    case "pending_approval":
+      return "Pending approval";
+    case "approved":
+      return "Approved";
     case "ordered":
       return "Ordered";
     case "partial":

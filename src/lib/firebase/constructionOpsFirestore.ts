@@ -330,3 +330,278 @@ export const updateToolCheckout = (
 
 export const deleteToolCheckout = (id: string) =>
   deleteDoc(doc(db, "toolCheckouts", id));
+
+// —— RFIs ——
+export interface RfiInput {
+  jobId: string;
+  jobTitle: string;
+  rfiNumber: string;
+  subject: string;
+  question: string;
+  assignedTo: string;
+  assignedEmail: string | null;
+  dueDate: string;
+  status: import("../constructionOps").RfiStatus;
+  drawingLinks: string;
+  createdBy: string;
+}
+
+export interface Rfi extends RfiInput {
+  id: string;
+  activityLog: import("../constructionOps").OpsActivityEntry[];
+  createdAt: { seconds: number; nanoseconds: number } | null;
+  updatedAt: { seconds: number; nanoseconds: number } | null;
+}
+
+export const subscribeToRfis = (onChange: (items: Rfi[]) => void) =>
+  onSnapshot(collection(db, "rfis"), (snap) => {
+    onChange(
+      sortByCreatedDesc(
+        snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Rfi, "id">) }))
+      )
+    );
+  });
+
+export const addRfi = (data: RfiInput) =>
+  addDoc(
+    collection(db, "rfis"),
+    omitUndefined({
+      ...data,
+      activityLog: [
+        { at: Date.now(), by: data.createdBy, action: `Created ${data.rfiNumber}` },
+      ],
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+  );
+
+export const updateRfi = (
+  id: string,
+  data: Partial<RfiInput>,
+  activity?: import("../constructionOps").OpsActivityEntry
+) => {
+  const patch: Partial<RfiInput> & {
+    updatedAt: ReturnType<typeof serverTimestamp>;
+    activityLog?: ReturnType<typeof arrayUnion>;
+  } = {
+    ...omitUndefined(data),
+    updatedAt: serverTimestamp(),
+  };
+  if (activity) patch.activityLog = arrayUnion(activity);
+  return updateDoc(doc(db, "rfis", id), patch);
+};
+
+export const deleteRfi = (id: string) => deleteDoc(doc(db, "rfis", id));
+
+// —— Daily reports ——
+export interface DailyReportInput {
+  jobId: string;
+  jobTitle: string;
+  reportDate: string;
+  weather: string;
+  crewOnSite: string;
+  workCompleted: string;
+  delays: string;
+  visitors: string;
+  safetyIncidents: string;
+  photoLinks: string;
+  notes: string;
+  submittedBy: string;
+  submittedByEmail: string | null;
+}
+
+export interface DailyReport extends DailyReportInput {
+  id: string;
+  createdAt: { seconds: number; nanoseconds: number } | null;
+}
+
+export const subscribeToDailyReports = (onChange: (items: DailyReport[]) => void) =>
+  onSnapshot(collection(db, "dailyReports"), (snap) => {
+    onChange(
+      sortByCreatedDesc(
+        snap.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<DailyReport, "id">),
+        }))
+      )
+    );
+  });
+
+export const addDailyReport = (data: DailyReportInput) =>
+  addDoc(
+    collection(db, "dailyReports"),
+    omitUndefined({ ...data, createdAt: serverTimestamp() })
+  );
+
+export const deleteDailyReport = (id: string) =>
+  deleteDoc(doc(db, "dailyReports", id));
+
+// —— Punch list ——
+export interface PunchListItemInput {
+  jobId: string;
+  jobTitle: string;
+  location: string;
+  description: string;
+  assignedSubId: string | null;
+  assignedSubName: string;
+  dueDate: string;
+  status: import("../constructionOps").PunchStatus;
+  photoLinks: string;
+  createdBy: string;
+}
+
+export interface PunchListItem extends PunchListItemInput {
+  id: string;
+  completedAt: number | null;
+  createdAt: { seconds: number; nanoseconds: number } | null;
+}
+
+export const subscribeToPunchListItems = (
+  onChange: (items: PunchListItem[]) => void
+) =>
+  onSnapshot(collection(db, "punchListItems"), (snap) => {
+    onChange(
+      sortByCreatedDesc(
+        snap.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<PunchListItem, "id">),
+        }))
+      )
+    );
+  });
+
+export const addPunchListItem = (data: PunchListItemInput) =>
+  addDoc(
+    collection(db, "punchListItems"),
+    omitUndefined({
+      ...data,
+      completedAt: null,
+      createdAt: serverTimestamp(),
+    })
+  );
+
+export const updatePunchListItem = (
+  id: string,
+  data: Partial<PunchListItemInput & { completedAt?: number | null }>
+) => updateDoc(doc(db, "punchListItems", id), omitUndefined(data));
+
+export const deletePunchListItem = (id: string) =>
+  deleteDoc(doc(db, "punchListItems", id));
+
+// —— Permits ——
+export interface PermitInput {
+  jobId: string;
+  jobTitle: string;
+  permitNumber: string;
+  permitType: string;
+  issuedDate: string;
+  expirationDate: string;
+  status: import("../constructionOps").PermitStatus;
+  notes: string;
+  createdBy: string;
+}
+
+export interface Permit extends PermitInput {
+  id: string;
+  createdAt: { seconds: number; nanoseconds: number } | null;
+}
+
+export const subscribeToPermits = (onChange: (items: Permit[]) => void) =>
+  onSnapshot(collection(db, "permits"), (snap) => {
+    onChange(
+      sortByCreatedDesc(
+        snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Permit, "id">) }))
+      )
+    );
+  });
+
+export const addPermit = (data: PermitInput) =>
+  addDoc(
+    collection(db, "permits"),
+    omitUndefined({ ...data, createdAt: serverTimestamp() })
+  );
+
+export const updatePermit = (id: string, data: Partial<PermitInput>) =>
+  updateDoc(doc(db, "permits", id), omitUndefined(data));
+
+export const deletePermit = (id: string) => deleteDoc(doc(db, "permits", id));
+
+// —— Inspections ——
+export interface InspectionInput {
+  jobId: string;
+  jobTitle: string;
+  permitId: string | null;
+  inspectionType: string;
+  scheduledDate: string;
+  result: import("../constructionOps").InspectionResult;
+  inspectorNotes: string;
+  createdBy: string;
+}
+
+export interface Inspection extends InspectionInput {
+  id: string;
+  createdAt: { seconds: number; nanoseconds: number } | null;
+}
+
+export const subscribeToInspections = (onChange: (items: Inspection[]) => void) =>
+  onSnapshot(collection(db, "inspections"), (snap) => {
+    onChange(
+      sortByCreatedDesc(
+        snap.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<Inspection, "id">),
+        }))
+      )
+    );
+  });
+
+export const addInspection = (data: InspectionInput) =>
+  addDoc(
+    collection(db, "inspections"),
+    omitUndefined({ ...data, createdAt: serverTimestamp() })
+  );
+
+export const updateInspection = (id: string, data: Partial<InspectionInput>) =>
+  updateDoc(doc(db, "inspections", id), omitUndefined(data));
+
+export const deleteInspection = (id: string) =>
+  deleteDoc(doc(db, "inspections", id));
+
+// —— Suppliers ——
+export interface SupplierInput {
+  name: string;
+  contactName: string;
+  email: string;
+  phone: string;
+  terms: string;
+  notes: string;
+  createdBy: string;
+}
+
+export interface Supplier extends SupplierInput {
+  id: string;
+  createdAt: { seconds: number; nanoseconds: number } | null;
+}
+
+export const subscribeToSuppliers = (onChange: (items: Supplier[]) => void) =>
+  onSnapshot(collection(db, "suppliers"), (snap) => {
+    onChange(
+      sortByCreatedDesc(
+        snap.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<Supplier, "id">),
+        }))
+      )
+    );
+  });
+
+export const addSupplier = (data: SupplierInput) =>
+  addDoc(
+    collection(db, "suppliers"),
+    omitUndefined({ ...data, createdAt: serverTimestamp() })
+  );
+
+export const updateSupplier = (id: string, data: Partial<SupplierInput>) =>
+  updateDoc(doc(db, "suppliers", id), omitUndefined(data));
+
+export const deleteSupplier = (id: string) => deleteDoc(doc(db, "suppliers", id));

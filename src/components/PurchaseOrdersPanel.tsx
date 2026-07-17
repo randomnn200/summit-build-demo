@@ -41,6 +41,10 @@ function statusColor(status: PurchaseOrderStatus) {
   switch (status) {
     case "draft":
       return "bg-gray-100 text-gray-700";
+    case "pending_approval":
+      return "bg-amber-100 text-amber-800";
+    case "approved":
+      return "bg-sky-100 text-sky-800";
     case "ordered":
       return "bg-blue-100 text-blue-800";
     case "partial":
@@ -371,6 +375,7 @@ export default function PurchaseOrdersPanel({
               className="profile-input"
             >
               <option value="draft">Save as draft</option>
+              <option value="pending_approval">Submit for approval</option>
               <option value="ordered">Submit as ordered</option>
             </select>
 
@@ -535,6 +540,17 @@ export default function PurchaseOrdersPanel({
                       Receive
                     </button>
                   )}
+                  {po.status === "approved" && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updatePurchaseOrderStatus(po.id, "ordered")
+                      }
+                      className="rounded-lg border border-brand-primary/30 px-3 py-1.5 text-xs font-semibold text-brand-primary hover:bg-brand-primary/5"
+                    >
+                      Mark ordered
+                    </button>
+                  )}
                   {po.status === "draft" && (
                     <button
                       type="button"
@@ -546,7 +562,9 @@ export default function PurchaseOrdersPanel({
                       Mark ordered
                     </button>
                   )}
-                  {(po.status === "draft" || po.status === "ordered") && (
+                  {(po.status === "draft" ||
+                    po.status === "ordered" ||
+                    po.status === "approved") && (
                     <button
                       type="button"
                       onClick={() =>

@@ -346,7 +346,6 @@ export default function ExpensesTab({
                     hideLabel
                     value={form.date}
                     onChange={(date) => set("date", date)}
-                    className="profile-input date-input"
                     required
                   />
                 </div>

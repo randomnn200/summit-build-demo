@@ -170,7 +170,7 @@ export default function SubcontractorsPanel({
                   hideLabel
                   value={form.insuranceExpiry}
                   onChange={(v) => set("insuranceExpiry", v)}
-                  className="profile-input date-input mt-1"
+                  className="mt-1"
                 />
               </label>
               <label className="text-xs text-gray-500">
@@ -179,7 +179,7 @@ export default function SubcontractorsPanel({
                   hideLabel
                   value={form.licenseExpiry}
                   onChange={(v) => set("licenseExpiry", v)}
-                  className="profile-input date-input mt-1"
+                  className="mt-1"
                 />
               </label>
             </div>

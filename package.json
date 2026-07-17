@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node scripts/dev.mjs",
+    "dev": "cmd /c scripts\\dev.cmd",
     "dev:fast": "next dev",
     "build": "next build",
     "start": "next start",

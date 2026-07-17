@@ -17,6 +17,12 @@ import {
   type TimeOffRequest,
 } from "../lib/firebase/firebaseUtils";
 import DateInput from "./DateInput";
+import TimeInput from "./TimeInput";
+import {
+  canManageFieldSchedule,
+  isOwnerRole,
+  staffScheduleEmails,
+} from "../lib/portalAccess";
 
 const GREEN = "var(--brand-primary)";
 const RED = "var(--brand-accent)";
@@ -124,7 +130,8 @@ export default function ScheduleTab({
   userEmail: string | null;
   config: RolesConfig;
 }) {
-  const isOwner = role === "owner";
+  const isOwner = isOwnerRole(role);
+  const isFieldLead = canManageFieldSchedule(role);
   const myEmail = userEmail?.trim().toLowerCase() ?? "";
 
   const [items, setItems] = useState<ScheduleItem[]>([]);
@@ -154,10 +161,11 @@ export default function ScheduleTab({
   }, []);
 
   useEffect(() => {
-    if (isOwner && config.employeeEmails.length > 0 && !selectedEmployee) {
-      setSelectedEmployee(config.employeeEmails[0]);
+    const emails = staffScheduleEmails(config);
+    if (isFieldLead && emails.length > 0 && !selectedEmployee) {
+      setSelectedEmployee(emails[0].trim().toLowerCase());
     }
-  }, [isOwner, config.employeeEmails, selectedEmployee]);
+  }, [isFieldLead, config, selectedEmployee]);
 
   const jobsById = useMemo(
     () => new Map(jobs.map((j) => [j.jobId, j])),
@@ -165,18 +173,18 @@ export default function ScheduleTab({
   );
 
   const employeeOptions = useMemo(() => {
-    const list = config.employeeEmails.map((email) => ({
-      email,
+    const list = staffScheduleEmails(config).map((email) => ({
+      email: email.trim().toLowerCase(),
       label:
-        config.employeeTitles[email] ||
+        config.employeeTitles[email.toLowerCase()] ||
         email.split("@")[0]?.replace(/\./g, " ") ||
         email,
     }));
-    if (isOwner && myEmail && !list.some((e) => e.email === myEmail)) {
-      list.unshift({ email: myEmail, label: userName || "Owner" });
+    if (isFieldLead && myEmail && !list.some((e) => e.email === myEmail)) {
+      list.unshift({ email: myEmail, label: userName || "Me" });
     }
     return list;
-  }, [config, isOwner, myEmail, userName]);
+  }, [config, isFieldLead, myEmail, userName]);
 
   const labelForEmail = (email: string) =>
     employeeOptions.find((e) => e.email === email)?.label ?? email;
@@ -316,8 +324,10 @@ export default function ScheduleTab({
           Schedule
         </h2>
         <p className="mt-1 text-sm text-gray-500">
-          {isOwner
-            ? "Assign work to your team and review each employee's calendar. Link entries to jobs by ID."
+          {isFieldLead
+            ? isOwner
+              ? "Assign work to your team and review each employee's calendar. Link entries to jobs by ID."
+              : "Assign crew to jobs, review team calendars, and manage field schedules."
             : "Your assigned jobs and time off requests."}
         </p>
       </div>
@@ -359,7 +369,7 @@ export default function ScheduleTab({
         </Card>
       )}
 
-      {!isOwner && (
+      {!isFieldLead && (
         <div className="grid gap-6 lg:grid-cols-2">
           <Card>
             <SectionTitle>My schedule</SectionTitle>
@@ -438,7 +448,7 @@ export default function ScheduleTab({
         </div>
       )}
 
-      {isOwner && (
+      {isFieldLead && (
         <>
           <div className="flex flex-wrap gap-2">
             <button
@@ -496,15 +506,11 @@ export default function ScheduleTab({
                     onChange={(date) => set("date", date)}
                     required
                   />
-                  <label className="block">
-                    <span className="text-sm font-medium text-gray-700">Time</span>
-                    <input
-                      type="time"
-                      value={form.time}
-                      onChange={(e) => set("time", e.target.value)}
-                      className="profile-input time-input mt-1"
-                    />
-                  </label>
+                  <TimeInput
+                    label="Time"
+                    value={form.time}
+                    onChange={(time) => set("time", time)}
+                  />
                 </div>
                 <input
                   value={form.location}
@@ -610,6 +616,70 @@ export default function ScheduleTab({
                     onDelete={onDelete}
                     emptyMessage="Nothing on your calendar."
                   />
+                  {!isOwner && (
+                    <div className="mt-6 border-t border-gray-100 pt-4">
+                      <SectionTitle>Request time off</SectionTitle>
+                      <form onSubmit={onTimeOffSubmit} className="mt-4 space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <DateInput
+                            label="Start date"
+                            value={timeOffForm.startDate}
+                            onChange={(startDate) =>
+                              setTimeOffForm((f) => ({ ...f, startDate }))
+                            }
+                          />
+                          <DateInput
+                            label="End date"
+                            value={timeOffForm.endDate}
+                            onChange={(endDate) =>
+                              setTimeOffForm((f) => ({ ...f, endDate }))
+                            }
+                          />
+                        </div>
+                        <textarea
+                          value={timeOffForm.reason}
+                          onChange={(e) =>
+                            setTimeOffForm((f) => ({ ...f, reason: e.target.value }))
+                          }
+                          rows={2}
+                          placeholder="Reason (e.g. family vacation, doctor appointment)"
+                          className="profile-input resize-none"
+                        />
+                        {timeOffError && (
+                          <p className="text-xs font-semibold text-red-600">
+                            {timeOffError}
+                          </p>
+                        )}
+                        <button
+                          type="submit"
+                          disabled={timeOffSaving}
+                          className="rounded-md px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                          style={{ backgroundColor: GREEN }}
+                        >
+                          {timeOffSaving ? "Submitting…" : "Submit request"}
+                        </button>
+                      </form>
+                      {myTimeOff.length > 0 && (
+                        <ul className="mt-4 space-y-2">
+                          {myTimeOff.map((req) => (
+                            <li
+                              key={req.id}
+                              className="rounded-lg border border-gray-100 px-3 py-2 text-sm"
+                            >
+                              <span className="font-semibold capitalize">
+                                {req.status}
+                              </span>
+                              <span className="text-gray-500">
+                                {" "}
+                                · {req.startDate} → {req.endDate}
+                              </span>
+                              <p className="text-xs text-gray-600">{req.reason}</p>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
                 </>
               )}
             </Card>

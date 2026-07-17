@@ -13,6 +13,7 @@ export function useRole() {
   const [role, setRole] = useState<Role>("customer");
   const [config, setConfig] = useState<RolesConfig>({
     ownerEmails: [],
+    superintendentEmails: [],
     employeeEmails: [],
     employeeTitles: {},
   });

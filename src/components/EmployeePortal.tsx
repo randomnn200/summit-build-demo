@@ -31,6 +31,15 @@ import {
 } from "lucide-react";
 import { useAuth } from "../lib/hooks/useAuth";
 import { useRole } from "../lib/hooks/useRole";
+import {
+  canAccessPortalTab,
+  canManageFieldSchedule,
+  defaultPortalTab,
+  isStaffRole,
+  roleBadgeColor,
+  roleLabels,
+  staffScheduleEmails,
+} from "../lib/portalAccess";
 import { useTheme } from "../lib/hooks/useTheme";
 import PhoneInput from "./PhoneInput";
 import { companyInitials, THEME_PRESETS } from "../lib/theme";
@@ -69,6 +78,7 @@ import {
   isEnvOwner,
   markTicketViewedByCompany,
   removeEmployee,
+  removeSuperintendent,
   requestTicketDeletion,
   roleForEmail,
   setEmployeeTitle,
@@ -156,7 +166,13 @@ export default function EmployeePortal() {
   }, [tab]);
 
   const loading = authLoading || roleLoading;
-  const isStaff = role === "owner" || role === "employee";
+  const isStaff = isStaffRole(role);
+
+  useEffect(() => {
+    if (!canAccessPortalTab(role, tab)) {
+      setTab(defaultPortalTab(role));
+    }
+  }, [role, tab]);
 
   // Gate the whole portal.
   if (loading) {
@@ -208,7 +224,7 @@ export default function EmployeePortal() {
       <PortalShell>
         <Gate
           title="No access"
-          message={`You're signed in as ${user.email}, but this account doesn't have employee access. Ask the owner to add you.`}
+          message={`You're signed in as ${user.email}, but this account doesn't have portal access. Ask the owner to add you as an employee or superintendent.`}
         >
           <Link
             href="/"
@@ -222,7 +238,7 @@ export default function EmployeePortal() {
     );
   }
 
-  const tabs: { id: Tab; label: string; icon: React.ReactNode; ownerOnly?: boolean }[] = [
+  const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: "tickets", label: "Tickets", icon: <ClipboardList size={16} /> },
     { id: "clients", label: "Clients", icon: <Contact size={16} /> },
     { id: "leads", label: "Lead Inbox", icon: <Inbox size={16} /> },
@@ -234,10 +250,10 @@ export default function EmployeePortal() {
     { id: "inventory", label: "Inventory", icon: <Package size={16} /> },
     { id: "expenses", label: "Expenses", icon: <Receipt size={16} /> },
     { id: "quotes", label: "Quote Helper", icon: <Calculator size={16} /> },
-    { id: "reviews", label: "Reviews", icon: <Star size={16} />, ownerOnly: true },
-    { id: "analytics", label: "Analytics", icon: <BarChart3 size={16} />, ownerOnly: true },
-    { id: "users", label: "Users", icon: <Users size={16} />, ownerOnly: true },
-    { id: "team", label: "Team", icon: <Users size={16} />, ownerOnly: true },
+    { id: "reviews", label: "Reviews", icon: <Star size={16} /> },
+    { id: "analytics", label: "Analytics", icon: <BarChart3 size={16} /> },
+    { id: "users", label: "Users", icon: <Users size={16} /> },
+    { id: "team", label: "Team", icon: <Users size={16} /> },
     { id: "settings", label: "Settings", icon: <Palette size={16} /> },
   ];
 
@@ -250,7 +266,7 @@ export default function EmployeePortal() {
     >
       <div className="mb-6 flex flex-wrap gap-2">
         {tabs
-          .filter((t) => !t.ownerOnly || role === "owner")
+          .filter((t) => canAccessPortalTab(role, t.id))
           .map((t) => (
             <button
               key={t.id}
@@ -368,7 +384,7 @@ function PortalShell({
   wide = false,
 }: {
   children: React.ReactNode;
-  user?: { email: string | null; role: string };
+  user?: { email: string | null; role: Role };
   onSignOut?: () => void;
   companyName?: string;
   wide?: boolean;
@@ -409,10 +425,10 @@ function PortalShell({
             {user && (
               <span
                 className="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
-                style={{ backgroundColor: user.role === "owner" ? RED : GREEN }}
+                style={{ backgroundColor: roleBadgeColor(user.role) }}
               >
                 <ShieldCheck size={12} />
-                {user.role}
+                {roleLabels[user.role] ?? user.role}
               </span>
             )}
             {onSignOut && (
@@ -1941,7 +1957,7 @@ function UserRow({
         <div className="flex items-center gap-3">
           <span
             className="flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold text-white"
-            style={{ backgroundColor: role === "owner" ? RED : GREEN }}
+            style={{ backgroundColor: roleBadgeColor(role) }}
           >
             {(user.displayName || email || "U")[0]?.toUpperCase()}
           </span>
@@ -1965,9 +1981,10 @@ function UserRow({
             }
             className="rounded-md border border-gray-200 px-2 py-1.5 text-sm font-semibold capitalize outline-none focus:border-gray-900 disabled:opacity-60"
           >
-            <option value="owner">owner</option>
-            <option value="employee">employee</option>
-            <option value="customer">customer</option>
+            <option value="owner">Owner</option>
+            <option value="superintendent">Superintendent</option>
+            <option value="employee">Employee</option>
+            <option value="customer">Customer</option>
           </select>
         </div>
       </div>
@@ -2028,13 +2045,26 @@ function TeamTab({
     }
   };
 
+  const onRemoveSuper = async (e: string) => {
+    setBusy(true);
+    try {
+      const updated = await removeSuperintendent(e);
+      setConfig(updated);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       <Card>
         <SectionTitle>Add Employee</SectionTitle>
         <p className="mt-1 text-sm text-gray-500">
-          Add a Google account email. Next time they sign in, the Employee
-          Portal unlocks for them.
+          Add a Google account email as a field employee. Promote someone to
+          superintendent in the Users tab for site-lead access (Project Ops,
+          jobs, inventory).
         </p>
         <div className="mt-4 flex gap-2">
           <input
@@ -2083,6 +2113,44 @@ function TeamTab({
               </li>
             ))}
           </ul>
+
+          <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-gray-400">
+            Superintendents
+          </p>
+          <p className="mt-1 text-xs text-gray-400">
+            Site leads — Project Ops, jobs, inventory, and crew scheduling.
+            Assign in the Users tab.
+          </p>
+          {config.superintendentEmails.length === 0 ? (
+            <p className="mt-2 text-sm text-gray-500">No superintendents yet.</p>
+          ) : (
+            <ul className="mt-2 space-y-1.5">
+              {config.superintendentEmails.map((e) => (
+                <li
+                  key={e}
+                  className="flex items-center justify-between rounded-md bg-amber-50 px-3 py-1.5 text-sm"
+                >
+                  <span className="truncate">{e}</span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="rounded-full px-2 py-0.5 text-xs font-semibold text-white"
+                      style={{ backgroundColor: "#d97706" }}
+                    >
+                      superintendent
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => onRemoveSuper(e)}
+                      disabled={busy}
+                      className="text-xs font-semibold text-gray-400 hover:text-red-600 disabled:opacity-50"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
 
           <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-gray-400">
             Employees

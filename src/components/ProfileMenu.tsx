@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Briefcase, LogOut, ShieldCheck } from "lucide-react";
+import { Briefcase, HardHat, LogOut, ShieldCheck } from "lucide-react";
 import { useAuth } from "../lib/hooks/useAuth";
 import { formatPhone } from "../lib/formatPhone";
 import PhoneInput from "./PhoneInput";
@@ -20,14 +20,16 @@ import {
 const GREEN = "var(--brand-primary)";
 const RED = "var(--brand-accent)";
 
-const roleLabels: Record<Role, string> = {
-  owner: "Owner",
-  employee: "Employee",
-  customer: "Customer",
-};
+import { useClientJobs } from "../lib/hooks/useClientJobs";
+import {
+  isStaffRole,
+  roleBadgeColor,
+  roleLabels,
+} from "../lib/portalAccess";
 
 export default function ProfileMenu() {
   const { user, loading: authLoading, signInWithGoogle, signOut } = useAuth();
+  const { hasProjects, loading: clientJobsLoading } = useClientJobs();
 
   const [role, setRole] = useState<Role>("customer");
   const [profile, setProfile] = useState<UserProfile>(emptyProfile);
@@ -201,7 +203,7 @@ export default function ProfileMenu() {
     }
   };
 
-  const isStaff = role === "owner" || role === "employee";
+  const isStaff = isStaffRole(role);
   const initial = (profile.displayName || user.email || "U")[0].toUpperCase();
 
   return (
@@ -245,7 +247,7 @@ export default function ProfileMenu() {
               </div>
               <span
                 className="flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold text-white"
-                style={{ backgroundColor: role === "owner" ? RED : GREEN }}
+                style={{ backgroundColor: roleBadgeColor(role) }}
               >
                 <ShieldCheck size={12} />
                 {roleLabels[role]}
@@ -261,6 +263,18 @@ export default function ProfileMenu() {
               >
                 <Briefcase size={16} />
                 Open Employee Portal
+              </Link>
+            )}
+
+            {hasProjects && !clientJobsLoading && (
+              <Link
+                href="/client"
+                onClick={() => setOpen(false)}
+                className="mt-4 flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-95"
+                style={{ backgroundColor: GREEN }}
+              >
+                <HardHat size={16} />
+                {isStaff ? "Preview client portal" : "Open client portal"}
               </Link>
             )}
 

@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { DEFAULT_THEME, companyInitials } from "../lib/theme";
+import ClientProjectBanner from "./ClientProjectBanner";
 import PricingTicket from "./PricingTicket";
 import QuoteContactForm from "./QuoteContactForm";
 import SiteHeader, { BUSINESS_HOURS, DEMO_PHONE, DEMO_PHONE_TEL } from "./SiteHeader";
@@ -139,6 +140,7 @@ export default function HomePage() {
     <main className="site-canvas text-gray-900">
       <div className="brand-bar" />
       <SiteHeader companyName={theme.companyName} initials={initials} />
+      <ClientProjectBanner />
 
       {/* Hero */}
       <section className="relative overflow-hidden">

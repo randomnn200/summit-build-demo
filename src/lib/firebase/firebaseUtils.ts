@@ -313,10 +313,11 @@ export const ensureUserRecord = async (
   }
 };
 
-export type Role = "owner" | "employee" | "customer";
+export type Role = "owner" | "superintendent" | "employee" | "customer";
 
 export interface RolesConfig {
   ownerEmails: string[];
+  superintendentEmails: string[];
   employeeEmails: string[];
   // Owner-managed job titles for employees, keyed by (lowercased) email.
   employeeTitles: Record<string, string>;
@@ -336,11 +337,17 @@ export const getRolesConfig = async (): Promise<RolesConfig> => {
     const d = snap.data() as Partial<RolesConfig>;
     return {
       ownerEmails: d.ownerEmails ?? [],
+      superintendentEmails: d.superintendentEmails ?? [],
       employeeEmails: d.employeeEmails ?? [],
       employeeTitles: d.employeeTitles ?? {},
     };
   }
-  return { ownerEmails: [], employeeEmails: [], employeeTitles: {} };
+  return {
+    ownerEmails: [],
+    superintendentEmails: [],
+    employeeEmails: [],
+    employeeTitles: {},
+  };
 };
 
 export const setRolesConfig = async (config: RolesConfig) => {
@@ -374,6 +381,11 @@ export const resolveRole = async (
     role = "owner";
   } else if (
     normalizedEmail &&
+    config.superintendentEmails.map(normalize).includes(normalizedEmail)
+  ) {
+    role = "superintendent";
+  } else if (
+    normalizedEmail &&
     config.employeeEmails.map(normalize).includes(normalizedEmail)
   ) {
     role = "employee";
@@ -385,8 +397,11 @@ export const addEmployee = async (email: string): Promise<RolesConfig> => {
   const config = await getRolesConfig();
   const e = normalize(email);
   if (!e) return config;
-  if (config.employeeEmails.map(normalize).includes(e) ||
-      config.ownerEmails.map(normalize).includes(e)) {
+  if (
+    config.employeeEmails.map(normalize).includes(e) ||
+    config.superintendentEmails.map(normalize).includes(e) ||
+    config.ownerEmails.map(normalize).includes(e)
+  ) {
     return config;
   }
   const updated = {
@@ -405,7 +420,25 @@ export const removeEmployee = async (email: string): Promise<RolesConfig> => {
   const updated = {
     ...config,
     employeeEmails: config.employeeEmails.filter((x) => normalize(x) !== e),
+    superintendentEmails: config.superintendentEmails.filter(
+      (x) => normalize(x) !== e
+    ),
     employeeTitles,
+  };
+  await setRolesConfig(updated);
+  return updated;
+};
+
+export const removeSuperintendent = async (
+  email: string
+): Promise<RolesConfig> => {
+  const config = await getRolesConfig();
+  const e = normalize(email);
+  const updated = {
+    ...config,
+    superintendentEmails: config.superintendentEmails.filter(
+      (x) => normalize(x) !== e
+    ),
   };
   await setRolesConfig(updated);
   return updated;
@@ -423,10 +456,19 @@ export const setUserRole = async (
   const config = await getRolesConfig();
   const e = normalize(email);
   let ownerEmails = config.ownerEmails.filter((x) => normalize(x) !== e);
+  let superintendentEmails = config.superintendentEmails.filter(
+    (x) => normalize(x) !== e
+  );
   let employeeEmails = config.employeeEmails.filter((x) => normalize(x) !== e);
   if (role === "owner") ownerEmails = [...ownerEmails, e];
+  else if (role === "superintendent") superintendentEmails = [...superintendentEmails, e];
   else if (role === "employee") employeeEmails = [...employeeEmails, e];
-  const updated = { ...config, ownerEmails, employeeEmails };
+  const updated = {
+    ...config,
+    ownerEmails,
+    superintendentEmails,
+    employeeEmails,
+  };
   await setRolesConfig(updated);
   return updated;
 };
@@ -439,6 +481,9 @@ export const roleForEmail = (
   const e = normalize(email);
   if (isEnvOwner(email) || config.ownerEmails.map(normalize).includes(e)) {
     return "owner";
+  }
+  if (config.superintendentEmails.map(normalize).includes(e)) {
+    return "superintendent";
   }
   if (config.employeeEmails.map(normalize).includes(e)) return "employee";
   return "customer";
@@ -856,12 +901,17 @@ export interface PurchaseOrderLine {
 export interface PurchaseOrderInput {
   poNumber: string;
   supplier: string;
+  supplierId?: string | null;
+  jobId?: string | null;
+  jobTitle?: string | null;
   status: PurchaseOrderStatus;
   lines: PurchaseOrderLine[];
   expectedDate?: string;
   notes?: string;
   createdBy: string;
   createdByEmail?: string | null;
+  approvedBy?: string | null;
+  approvedAt?: number | null;
 }
 
 export interface PurchaseOrder extends PurchaseOrderInput {
@@ -910,6 +960,22 @@ export const updatePurchaseOrderStatus = (
     })
   );
 
+export const approvePurchaseOrder = (
+  id: string,
+  approvedBy: string,
+  approvedByEmail?: string | null
+) =>
+  updateDoc(
+    doc(db, "purchaseOrders", id),
+    omitUndefined({
+      status: "approved" as PurchaseOrderStatus,
+      approvedBy,
+      approvedByEmail: approvedByEmail ?? null,
+      approvedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+  );
+
 export const receivePurchaseOrderItems = async (
   poId: string,
   receives: { lineIndex: number; quantity: number }[],
@@ -925,6 +991,9 @@ export const receivePurchaseOrderItems = async (
     const po = poSnap.data() as Omit<PurchaseOrder, "id">;
     if (po.status === "cancelled") {
       throw new Error("This purchase order was cancelled");
+    }
+    if (po.status !== "ordered" && po.status !== "partial") {
+      throw new Error("Only ordered or partially received POs can be received");
     }
 
     const lines = po.lines.map((l) => ({ ...l }));
@@ -1136,7 +1205,7 @@ export const createJob = async (data: JobInput): Promise<string> => {
           ...data,
           jobId,
           clientUid: data.clientUid ?? null,
-          clientEmail: data.clientEmail ?? null,
+          clientEmail: data.clientEmail?.trim().toLowerCase() ?? null,
           postalCode: data.postalCode.trim(),
           notes: data.notes?.trim() || null,
           createdByEmail: data.createdByEmail ?? null,
